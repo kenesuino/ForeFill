@@ -16,6 +16,7 @@ import {
   type Ref,
 } from 'react';
 import { cx } from './utils/cx';
+import { filterMatches } from './utils/filterMatches';
 import {
   useSuggestions,
   type AsyncSuggestionFetcher,
@@ -96,6 +97,15 @@ export interface ForeFillProps {
   size?: ForeFillSize;
   /** Match strategy. Default 'substring'. */
   matchMode?: ForeFillMatchMode;
+  /**
+   * When the field already contains text, also match the *entire* value against
+   * the static `suggestions` so a suggestion that contains the whole value as a
+   * substring renders the full left+right ghost (e.g. `have a great` ->
+   * `Hope you have a great rest of your week!`). When `false`, only newly typed
+   * text after the existing value is completed. Async and trigger suggestions
+   * are unaffected. Default `true`.
+   */
+  matchWholeValue?: boolean;
   /** Disable the automatic inline ghost suggestion. */
   disableInlineFill?: boolean;
   /**
@@ -202,6 +212,7 @@ const DEFAULTS = {
   variant: 'outline' as ForeFillVariant,
   size: 'md' as ForeFillSize,
   matchMode: 'substring' as ForeFillMatchMode,
+  matchWholeValue: true,
   disableInlineFill: false,
   enableArrowNavigation: true,
   minQueryLength: 1,
@@ -210,6 +221,7 @@ const DEFAULTS = {
 };
 
 const DEFAULT_TRIGGER_SUGGESTIONS: ForeFillTriggerSuggestion[] = [];
+const EMPTY_MATCHES: string[] = [];
 
 const useBrowserLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect;
@@ -362,6 +374,12 @@ function buildNormalCompletion(
   const valuePrefix = value.slice(0, context.queryStart);
   const finalSegment = `${parts.prefix}${context.query}${parts.suffix}`;
 
+  // With text already in the field before the query (queryStart > 0), the inline
+  // ghost can only render as a clean append — the real value stays in place and
+  // the ghost trails after it. A substring match (non-empty prefix) would have
+  // to inject the prefix mid-string, which the single-shift overlay can't align,
+  // so it's skipped here. Whole-value matching (queryStart === 0) covers the
+  // case where the field's entire content is itself a substring of a suggestion.
   if (context.queryStart > 0 && parts.prefix !== '') {
     return null;
   }
@@ -501,6 +519,7 @@ export const ForeFill = forwardRef(function ForeFill(
     variant = DEFAULTS.variant,
     size = DEFAULTS.size,
     matchMode = DEFAULTS.matchMode,
+    matchWholeValue = DEFAULTS.matchWholeValue,
     disableInlineFill = DEFAULTS.disableInlineFill,
     enableArrowNavigation = DEFAULTS.enableArrowNavigation,
     minQueryLength = DEFAULTS.minQueryLength,
@@ -569,6 +588,39 @@ export const ForeFill = forwardRef(function ForeFill(
     debounceMs,
     matchMode,
   });
+
+  // Whole-value matching. When the field already holds text, the active query
+  // is normally just the newly appended segment, so a suggestion that contains
+  // the *entire* field value as a substring (e.g. "have a great" inside "Hope
+  // you have a great rest of your week!") never matches and no left+right ghost
+  // appears. Matching the whole value here restores that ghost. Only the static
+  // list is searched this way — async/debounced sources stay scoped to the
+  // appended segment — and the appended-segment matches above remain the
+  // fallback when the whole value matches nothing.
+  const wholeContext = useMemo(
+    () => getCompletionContext(currentValue, 0),
+    [currentValue]
+  );
+  const wholeMatches = useMemo(() => {
+    if (!matchWholeValue || normalAsyncSuggestions || activeTrigger || !suggestions) {
+      return EMPTY_MATCHES;
+    }
+    // activeSegmentStart === 0 means the whole value already *is* the active
+    // query, so the segment matches cover it; no separate pass is needed.
+    if (activeSegmentStart === 0) return EMPTY_MATCHES;
+    if (wholeContext.query.trim().length < minQueryLength) return EMPTY_MATCHES;
+    return filterMatches(wholeContext.query, suggestions, matchMode);
+  }, [
+    activeSegmentStart,
+    activeTrigger,
+    matchMode,
+    matchWholeValue,
+    minQueryLength,
+    normalAsyncSuggestions,
+    suggestions,
+    wholeContext,
+  ]);
+
   const ghostText = ghostCompletion?.suggestion ?? null;
 
   useImperativeHandle(
@@ -811,15 +863,26 @@ export const ForeFill = forwardRef(function ForeFill(
         ? maxLength
         : undefined;
 
-    const nextInlineMatches = activeTrigger
-      ? buildTriggerCompletions(currentValue, activeTrigger)
-      : completionContext.query.trim().length < minQueryLength
+    const segmentInlineMatches =
+      completionContext.query.trim().length < minQueryLength
         ? []
         : matches
             .map((match) =>
               buildNormalCompletion(currentValue, completionContext, match)
             )
             .filter((match): match is InlineCompletion => match !== null);
+
+    // Prefer whole-value substring matches (they render the richer left+right
+    // ghost) and fall back to the appended-segment matches otherwise.
+    const wholeInlineMatches = wholeMatches
+      .map((match) => buildNormalCompletion(currentValue, wholeContext, match))
+      .filter((match): match is InlineCompletion => match !== null);
+
+    const nextInlineMatches = activeTrigger
+      ? buildTriggerCompletions(currentValue, activeTrigger)
+      : wholeInlineMatches.length > 0
+        ? wholeInlineMatches
+        : segmentInlineMatches;
 
     const nextAvailableMatches =
       nativeMaxLength === undefined
@@ -857,6 +920,8 @@ export const ForeFill = forwardRef(function ForeFill(
     normalAsyncSuggestions,
     readOnly,
     surface,
+    wholeContext,
+    wholeMatches,
   ]);
 
   const ghostTextParts = ghostCompletion?.parts ?? null;

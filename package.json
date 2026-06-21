@@ -1,7 +1,7 @@
 {
   "name": "forefill",
   "private": false,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ForeFill — inline ghost-text autocomplete for React textareas, textboxes, and contenteditable surfaces.",
   "type": "module",
   "license": "MIT",
@@ -39,6 +39,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -60,6 +63,8 @@
     "build:styles": "node -e \"const fs=require('node:fs');fs.mkdirSync('dist',{recursive:true});fs.copyFileSync('src/lib/styles/forefill.css','dist/styles.css')\"",
     "build:site": "vite build --config vite.config.ts",
     "build": "npm run clean && npm run typecheck && npm run test && npm run build:js && npm run build:types && npm run build:styles",
+    "release:check": "npm run build && npm run pack:dry",
+    "publish:npm": "npm run release:check && npm publish",
     "pack:dry": "npm pack --dry-run",
     "preview": "vite preview"
   },

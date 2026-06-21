@@ -137,6 +137,13 @@ can still complete a newly appended `Thanks` into:
 Happy to help - let me take a look. Thanks so much for reaching out!
 ```
 
+With `matchWholeValue` (on by default), the saved text is also matched as a
+whole, so when the field's entire value is contained in a suggestion it renders
+the full left+right ghost — a field holding `have a great` completes to
+`Hope you have a great rest of your week!`. Set `matchWholeValue={false}` to
+complete only the newly appended segment. Async and trigger suggestions are
+unaffected either way.
+
 ## Copy-Paste Recipes
 
 Reply textarea:
@@ -766,6 +773,7 @@ Every public prop below includes its use and a short example.
 | `triggerSuggestions` | `ForeFillTriggerSuggestion[]`, default `[]` | Adds trigger-specific completions for symbols or words, such as email domains after `@`. | `<ForeFill triggerSuggestions={[{ trigger: '@', suggestions: ['gmail.com'] }]} />` |
 | `asyncSuggestions` | `(query: string, context?: { signal: AbortSignal }) => Promise<string[]>` | Loads suggestions from an API, aborts stale requests, and takes precedence over `suggestions`. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={250} />` |
 | `matchMode` | `'startsWith' \| 'substring'`, default `'substring'` | Controls matching for normal suggestions; trigger suggestions always use starts-with matching. | `<ForeFill matchMode="startsWith" />` |
+| `matchWholeValue` | `boolean`, default `true` | When the field already contains text, also matches the whole value against the static `suggestions` so a suggestion that contains it renders the full left+right ghost. Off completes only newly appended text. Async/trigger sources are unaffected. | `<ForeFill matchWholeValue={false} />` |
 | `minQueryLength` | `number`, default `1` | Requires a trimmed query length before suggestions activate. | `<ForeFill minQueryLength={3} />` |
 | `debounceMs` | `number`, default `0` | Delays async requests while the user is typing. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={300} />` |
 | `disableInlineFill` | `boolean`, default `false` | Keeps the editable field behavior but hides ghost hints. | `<ForeFill disableInlineFill />` |
@@ -957,7 +965,12 @@ dist/styles.css
 ## Publish Checklist
 
 1. Confirm `author`, `repository`, and `homepage` in `package.json`.
-2. Run `npm run build`.
-3. Run `npm run pack:dry`.
-4. Install the generated `.tgz` in a separate React app.
-5. Publish with `npm publish`.
+2. Log in once with `npm login`, then confirm with `npm whoami`.
+3. Run `npm run release:check`.
+4. Optional: run `npm pack` and install the generated `.tgz` in a separate React app.
+5. Publish with `npm run publish:npm`.
+
+For the first public publish, the package name `forefill` must still be
+available on npm. If it is not, change `name` to a scoped package such as
+`@your-npm-username/forefill` and publish with the same `npm run publish:npm`
+script.

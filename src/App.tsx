@@ -69,6 +69,7 @@ interface PlaygroundState {
   size: ForeFillSize;
   themeChoice: ThemeChoice;
   matchMode: ForeFillMatchMode;
+  matchWholeValue: boolean;
   minQueryLength: number;
   debounceMs: number;
   asyncMode: boolean;
@@ -186,6 +187,7 @@ const PLAYGROUND_DEFAULT_STATE: PlaygroundState = {
   size: 'md',
   themeChoice: 'auto',
   matchMode: 'substring',
+  matchWholeValue: true,
   minQueryLength: 1,
   debounceMs: 0,
   asyncMode: false,
@@ -465,6 +467,14 @@ const API_PROPS: ApiProp[] = [
     desc: 'Normal suggestion matching strategy.',
     purpose: 'Trigger suggestions always use startsWith; this controls the normal suggestions list.',
     example: '<ForeFill matchMode="startsWith" />',
+  },
+  {
+    name: 'matchWholeValue',
+    type: 'boolean',
+    def: 'true',
+    desc: 'Match the entire field value when it already contains text.',
+    purpose: "Lets a suggestion that contains the whole value render the full left+right ghost (e.g. 'have a great' completes to 'Hope you have a great rest of your week!'). Turn off to only complete newly appended text.",
+    example: '<ForeFill matchWholeValue={false} />',
   },
   {
     name: 'disableInlineFill',
@@ -1463,6 +1473,7 @@ const DOC_CATEGORIES: DocCategory[] = [
       'triggerSuggestions',
       'asyncSuggestions',
       'matchMode',
+      'matchWholeValue',
       'minQueryLength',
       'debounceMs',
     ],
@@ -1630,6 +1641,24 @@ const PROP_DEMOS: Record<string, PropDemo> = {
       <ForeFill suggestions={DEFAULT_SUGGESTIONS} matchMode={value as ForeFillMatchMode} placeholder="Type 'Thanks'" showHelper="idle" />
     ),
     code: (value) => `<ForeFill matchMode="${value}" suggestions={suggestions} />`,
+  },
+  matchWholeValue: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => (
+      <ForeFill
+        key={String(value)}
+        suggestions={DEFAULT_SUGGESTIONS}
+        matchWholeValue={value as boolean}
+        defaultValue="have a great"
+        placeholder="Focus the saved text"
+        showHelper="idle"
+      />
+    ),
+    code: (value) => `<ForeFill
+  matchWholeValue={${value}}
+  defaultValue="have a great"
+  suggestions={suggestions}
+/>`,
   },
   minQueryLength: {
     control: { kind: 'number', default: 3, min: 1, max: 10 },
@@ -2357,6 +2386,26 @@ import '${PKG}/styles.css';`}
               showHelper="idle"
             />
           </ExampleCard>
+          <p>
+            With <code>matchWholeValue</code> (on by default) the saved text is also
+            matched as a whole, so when the entire value is contained in a suggestion it
+            renders the full left+right ghost. Set <code>matchWholeValue={'{false}'}</code> to
+            complete only newly appended text.
+          </p>
+          <ExampleCard
+            filename="MatchWholeValue.tsx"
+            code={`<ForeFill
+  defaultValue="have a great"
+  suggestions={['Hope you have a great rest of your week!']}
+/>`}
+          >
+            <ForeFill
+              defaultValue="have a great"
+              suggestions={DEFAULT_SUGGESTIONS}
+              placeholder="Focus the saved text"
+              showHelper="idle"
+            />
+          </ExampleCard>
         </DocSection>
 
         <DocSection id="async-suggestions" title="Async suggestions" icon={<Code2 className="h-5 w-5" />}>
@@ -2590,6 +2639,7 @@ function Playground({ theme }: { theme: ThemeMode }) {
             variant={s.variant}
             size={s.size}
             matchMode={s.matchMode}
+            matchWholeValue={s.matchWholeValue}
             minQueryLength={s.minQueryLength}
             debounceMs={s.debounceMs}
             disableInlineFill={s.disableInlineFill}
@@ -2677,6 +2727,9 @@ function Playground({ theme }: { theme: ThemeMode }) {
           <ControlGroup title="Matching">
             <Control name="matchMode" openHelp={openHelp} setOpenHelp={setOpenHelp}>
               <Select value={s.matchMode} onChange={(value) => set('matchMode', value as ForeFillMatchMode)} options={['substring', 'startsWith']} />
+            </Control>
+            <Control name="matchWholeValue" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+              <Toggle checked={s.matchWholeValue} onChange={(value) => set('matchWholeValue', value)} labels={['on', 'off']} />
             </Control>
             <Control name="minQueryLength" openHelp={openHelp} setOpenHelp={setOpenHelp}>
               <NumberInput value={s.minQueryLength} min={1} max={10} onChange={(value) => set('minQueryLength', Math.max(1, value))} />
@@ -2816,6 +2869,7 @@ function buildForeFillCode(
   if (s.size !== 'md') str('size', s.size);
   if (s.themeChoice !== 'auto') str('theme', s.themeChoice);
   if (s.matchMode !== 'substring') str('matchMode', s.matchMode);
+  if (!s.matchWholeValue) raw('matchWholeValue', 'false');
   if (s.minQueryLength !== 1) raw('minQueryLength', String(s.minQueryLength));
   if (s.debounceMs !== 0) raw('debounceMs', String(s.debounceMs));
   if (s.disableInlineFill) flag('disableInlineFill');

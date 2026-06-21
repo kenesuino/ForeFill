@@ -535,6 +535,57 @@ describe('ForeFill — existing text completion', () => {
     );
   });
 
+  it('completes a substring match when the field already holds the prefix', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        defaultValue="Hope you have a great rest of your "
+        suggestions={['Hope you have a great rest of your week!']}
+        matchMode="substring"
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'week');
+    await waitFor(() => expect(ghostSuffix()).toBe('!'));
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith(
+      'Hope you have a great rest of your week!'
+    );
+  });
+
+  it('shows a left+right ghost when the whole prefilled value is a substring', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        defaultValue="have a grea"
+        suggestions={['Hope you have a great rest of your week!']}
+        matchMode="substring"
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    // Completing the prefilled word makes the whole value a substring match.
+    await user.type(field, 't');
+
+    await waitFor(() => expect(ghostPrefix()).toBe('Hope you '));
+    expect(ghostSuffix()).toBe(' rest of your week!');
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith(
+      'Hope you have a great rest of your week!'
+    );
+  });
+
   it('passes only the appended active query to async suggestions', async () => {
     const user = userEvent.setup();
     const fetcher = vi.fn(async (q: string) => [
