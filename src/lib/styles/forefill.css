@@ -355,12 +355,12 @@
   overflow: hidden;
   white-space: nowrap;
 }
-.ff-editor--richtext {
+.ff-editor--contenteditable {
   min-height: var(--ff-min-height);
   overflow-wrap: break-word;
   white-space: pre-wrap;
 }
-.ff-editor--richtext[data-empty="true"]::before {
+.ff-editor--contenteditable[data-empty="true"]::before {
   content: attr(data-placeholder);
   color: var(--ff-muted);
   pointer-events: none;
@@ -379,7 +379,7 @@
   background: var(--ff-surface-muted);
 }
 .ff-editor:disabled,
-.ff-editor--richtext[aria-disabled="true"] {
+.ff-editor--contenteditable[aria-disabled="true"] {
   cursor: not-allowed;
 }
 
@@ -431,24 +431,6 @@
   line-height: 1;
 }
 
-/* ----- Status / validation message ------------------------------------- */
-.ff-status {
-  display: flex;
-  align-items: center;
-  gap: 0.4em;
-  margin-top: 0.45rem;
-  font-size: 0.8125rem;
-  line-height: 1.4;
-  color: var(--ff-muted);
-  animation: ff-helper-in var(--ff-duration-fast) var(--ff-ease) both;
-}
-.ff-root[data-state="error"] .ff-status {
-  color: var(--ff-danger);
-}
-.ff-root[data-state="success"] .ff-status {
-  color: var(--ff-success);
-}
-
 /* ----- Screen-reader-only utility --------------------------------------- */
 .ff-sr-only {
   position: absolute;
@@ -484,7 +466,29 @@
       0 1px 1.5px rgba(0, 0, 0, 0.4);
   }
 }
-.ff-root[data-theme="dark"] {
+:where([data-theme="light"]) .ff-root:not([data-theme="dark"]) {
+  --ff-bg: var(--ff-color-bg-focus, var(--ff-color-bg, #ffffff));
+  --ff-bg-rest: var(--ff-color-muted-bg, #f6f7f9);
+  --ff-bg-hover: #f1f3f6;
+  --ff-surface-muted: var(--ff-color-muted-bg, #f3f5f8);
+  --ff-text: var(--ff-color-text, #16202c);
+  --ff-muted: var(--ff-color-muted, #5b6675);
+  --ff-faint: color-mix(in srgb, var(--ff-muted) 70%, transparent);
+  --ff-border: var(--ff-color-border, #d7dde6);
+  --ff-border-strong: color-mix(in srgb, var(--ff-border) 70%, var(--ff-text));
+  --ff-accent: var(--ff-color-accent, #2563eb);
+  --ff-accent-strong: color-mix(in srgb, var(--ff-accent) 80%, #000);
+  --ff-success: #0e9f6e;
+  --ff-danger: #e02424;
+  --ff-key-bg: var(--ff-helper-key-bg, #ffffff);
+  --ff-key-shadow: var(
+    --ff-helper-key-shadow,
+    inset 0 -1px 0 rgba(15, 23, 42, 0.1),
+    0 1px 1.5px rgba(15, 23, 42, 0.08)
+  );
+}
+.ff-root[data-theme="dark"],
+:where([data-theme="dark"]) .ff-root:not([data-theme="light"]) {
   --ff-bg: #161b22;
   --ff-bg-rest: #1b212b;
   --ff-bg-hover: #212835;
@@ -519,7 +523,6 @@
   .ff-editor,
   .ff-ghost,
   .ff-helper,
-  .ff-status,
   .ff-root[data-variant="underline"] .ff-field::after {
     transition: none;
     animation: none;

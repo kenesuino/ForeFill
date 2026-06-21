@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Inline ghost-text autocomplete for React textareas, inputs, and contenteditable richtext surfaces.
+  Inline ghost-text autocomplete for React textareas, inputs, and contenteditable surfaces.
 </p>
 
 <p align="center">
@@ -17,14 +17,14 @@
 
 ## Overview
 
-**ForeFill** (`forefill`) is a small React component that shows a ghost suggestion directly inside a textarea, input, or contenteditable richtext surface — the user keeps typing and the rest fills in ahead of the caret.
+**ForeFill** (`forefill`) is a small React component that shows a ghost suggestion directly inside a textarea, input, or contenteditable surface — the user keeps typing and the rest fills in ahead of the caret.
 
 It is designed for forms where users should keep typing naturally, then accept a suggestion with `Tab` or `Enter`.
 
 | Capability | Included |
 | --- | --- |
 | Inline ghost hint | Yes |
-| Textarea, input, and richtext surfaces | Yes |
+| Textarea, input, and contenteditable surfaces | Yes |
 | Prefix matching | Yes |
 | Substring matching | Yes |
 | Custom trigger suggestions | Yes |
@@ -55,6 +55,9 @@ import 'forefill/styles.css';
 ## Quick Start
 
 ```tsx
+import { ForeFill } from 'forefill';
+import 'forefill/styles.css';
+
 const replies = [
   'Thanks so much for reaching out!',
   'Happy to help — let me take a look.',
@@ -74,7 +77,22 @@ export function ReplyBox() {
 }
 ```
 
+That is enough for a working uncontrolled field. Add `value` and `onChange`
+when you want a controlled React form field.
+
 ## How It Behaves
+
+| Situation | Behavior |
+| --- | --- |
+| User types at the end of the value | ForeFill finds the best matching suggestion and renders the unmatched text as an inline ghost. |
+| User types in the middle or selects text | The ghost is suppressed so the overlay does not appear in the wrong position. |
+| Multiple suggestions match | `ArrowDown` and `ArrowUp` cycle through inline candidates when `enableArrowNavigation` is enabled. |
+| `Tab` is pressed with a visible hint | The hint is accepted and `onAccept` then `onCommit` can fire. |
+| `Enter` is pressed with a visible hint | Accepts the hint by default; set `acceptOnEnter={false}` when Enter should commit typed text only. |
+| `Escape` is pressed with a visible hint | The hint is dismissed and stays hidden until the value changes. |
+| A trigger suggestion is active | Trigger completions take precedence over normal static or async suggestions. |
+| `asyncSuggestions` is loading | The ghost is hidden and the loading bar/`aria-busy` state is shown. |
+| Accepted value would exceed `maxLength` | The completion is suppressed for native input and textarea surfaces. |
 
 If the user types:
 
@@ -119,6 +137,69 @@ can still complete a newly appended `Thanks` into:
 Happy to help - let me take a look. Thanks so much for reaching out!
 ```
 
+## Copy-Paste Recipes
+
+Reply textarea:
+
+```tsx
+<ForeFill
+  as="textarea"
+  suggestions={replies}
+  placeholder="Write a reply..."
+  showHelper="idle"
+/>
+```
+
+Email/domain input:
+
+```tsx
+<ForeFill
+  as="input"
+  inputType="email"
+  triggerSuggestions={[
+    { trigger: '@', suggestions: ['gmail.com', 'outlook.com'] },
+  ]}
+  placeholder="alex@g"
+/>
+```
+
+Async suggestions:
+
+```tsx
+<ForeFill
+  debounceMs={250}
+  asyncSuggestions={async (query, { signal }) => {
+    const res = await fetch('/api/suggestions?q=' + encodeURIComponent(query), {
+      signal,
+    });
+    return res.json();
+  }}
+/>
+```
+
+Controlled form field:
+
+```tsx
+const [value, setValue] = useState('');
+
+<ForeFill
+  value={value}
+  onChange={setValue}
+  name="reply"
+  suggestions={replies}
+/>
+```
+
+Plain-text contenteditable:
+
+```tsx
+<ForeFill
+  as="contenteditable"
+  suggestions={notes}
+  placeholder="Draft a note..."
+/>
+```
+
 ## Surface Modes
 
 Use the `as` prop to choose where autosuggest runs.
@@ -147,13 +228,13 @@ Best for single-line fields.
 />
 ```
 
-### Richtext
+### Contenteditable
 
 Best when you need a `contenteditable` surface. The autosuggest value is plain text, which keeps matching, committing, and async suggestions predictable.
 
 ```tsx
 <ForeFill
-  as="richtext"
+  as="contenteditable"
   suggestions={suggestions}
 />
 ```
@@ -299,14 +380,14 @@ Style the helper:
   --ff-helper-gap: 0.25em;
 }
 
-.reply-helper-key {
+.reply-helper .ff-key {
   min-width: 1.9em;
   min-height: 1.3em;
   padding-inline: 0.32em;
   border-radius: 3px;
 }
 
-.reply-helper kbd {
+.reply-helper .ff-key {
   border-color: #94a3b8;
 }
 ```
@@ -384,18 +465,26 @@ segment or after whitespace/punctuation.
 
 ## Async Suggestions
 
-Use `asyncSuggestions` when suggestions come from an API. `debounceMs` delays the request while the user is typing.
+Use `asyncSuggestions` when suggestions come from an API. `debounceMs` delays
+the request while the user is typing, and the second argument includes an
+`AbortSignal` for cancelling stale requests.
 
 ```tsx
 <ForeFill
   minQueryLength={2}
   debounceMs={250}
-  asyncSuggestions={async (query) => {
-    const res = await fetch(`/api/suggestions?q=${encodeURIComponent(query)}`);
+  asyncSuggestions={async (query, { signal }) => {
+    const res = await fetch(`/api/suggestions?q=${encodeURIComponent(query)}`, {
+      signal,
+    });
     return res.json();
   }}
 />
 ```
+
+When the query changes, ForeFill aborts the previous request and clears stale
+matches. If a request fails, the component stops loading and shows no old async
+hint.
 
 ## Validation And Status
 
@@ -417,6 +506,25 @@ get the bar for free.
 | `status="error"` | Error border + ring, `aria-invalid`. |
 | `status="success"` | Success border + ring. |
 | `status="loading"` | Indeterminate progress bar, `aria-busy`. |
+
+## Accessibility Labels
+
+Use `ariaLabel` for unlabeled fields, or `ariaLabelledBy` when a visible label
+already exists. Use `ariaDescribedBy` for external helper or error text; ForeFill
+merges it with the internal keyboard helper description when the helper is
+visible.
+
+```tsx
+<label id="reply-label">Reply</label>
+<p id="reply-help">Use Tab to accept the inline suggestion.</p>
+
+<ForeFill
+  ariaLabelledBy="reply-label"
+  ariaDescribedBy="reply-help"
+  suggestions={suggestions}
+  showHelper="idle"
+/>
+```
 
 ## Dark Mode
 
@@ -476,7 +584,7 @@ so these can't break its behavior. `readOnly` also suppresses the inline ghost.
 with the inline ghost.)
 
 > The `name`, `required`, and `maxLength` attributes apply to the `textarea` and
-> `input` surfaces. The `richtext` (contenteditable) surface is not a
+> `input` surfaces. The `contenteditable` surface is not a
 > native form control, so it won't submit a value — use a hidden input mirror if
 > you need that.
 
@@ -643,7 +751,7 @@ in your own stylesheet to re-skin the component.
 | `--ff-padding-x` | Horizontal padding |
 | `--ff-font-size` | Text size |
 | `--ff-line-height` | Text line height |
-| `--ff-min-height` | Minimum textarea/richtext height |
+| `--ff-min-height` | Minimum textarea/contenteditable height |
 | `--ff-input-min-height` | Input height |
 
 ## Props
@@ -656,7 +764,7 @@ Every public prop below includes its use and a short example.
 | --- | --- | --- | --- |
 | `suggestions` | `string[]`, default `[]` | Static suggestion list used when no trigger completion is active. | `<ForeFill suggestions={['Thanks so much!']} />` |
 | `triggerSuggestions` | `ForeFillTriggerSuggestion[]`, default `[]` | Adds trigger-specific completions for symbols or words, such as email domains after `@`. | `<ForeFill triggerSuggestions={[{ trigger: '@', suggestions: ['gmail.com'] }]} />` |
-| `asyncSuggestions` | `(query: string) => Promise<string[]>` | Loads suggestions from an API and takes precedence over `suggestions`. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={250} />` |
+| `asyncSuggestions` | `(query: string, context?: { signal: AbortSignal }) => Promise<string[]>` | Loads suggestions from an API, aborts stale requests, and takes precedence over `suggestions`. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={250} />` |
 | `matchMode` | `'startsWith' \| 'substring'`, default `'substring'` | Controls matching for normal suggestions; trigger suggestions always use starts-with matching. | `<ForeFill matchMode="startsWith" />` |
 | `minQueryLength` | `number`, default `1` | Requires a trimmed query length before suggestions activate. | `<ForeFill minQueryLength={3} />` |
 | `debounceMs` | `number`, default `0` | Delays async requests while the user is typing. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={300} />` |
@@ -667,10 +775,10 @@ Every public prop below includes its use and a short example.
 
 | Prop | Type / default | Use | Example |
 | --- | --- | --- | --- |
-| `as` | `'textarea' \| 'input' \| 'richtext'`, default `'textarea'` | Chooses the editable surface. | `<ForeFill as="input" suggestions={suggestions} />` |
+| `as` | `'textarea' \| 'input' \| 'contenteditable'`, default `'textarea'` | Chooses the editable surface. | `<ForeFill as="input" suggestions={suggestions} />` |
 | `rows` | `number`, default `3` | Sets visible rows for `as="textarea"`. | `<ForeFill as="textarea" rows={5} />` |
 | `inputType` | `string`, default `'text'` | Sets the native type for `as="input"`. | `<ForeFill as="input" inputType="email" />` |
-| `placeholder` | `string`, default `'Type to search...'` | Sets the placeholder or richtext empty-state text. | `<ForeFill placeholder="Write a reply..." />` |
+| `placeholder` | `string`, default `'Type to search...'` | Sets the placeholder or contenteditable empty-state text. | `<ForeFill placeholder="Write a reply..." />` |
 | `defaultValue` | `string`, default `''` | Sets the initial uncontrolled value. | `<ForeFill defaultValue="Existing text. " />` |
 | `value` | `string` | Makes the component controlled; pair it with `onChange`. | `<ForeFill value={value} onChange={setValue} />` |
 | `disabled` | `boolean`, default `false` | Disables input and interactive completion. | `<ForeFill disabled />` |
@@ -693,6 +801,8 @@ Every public prop below includes its use and a short example.
 | Prop | Type / default | Use | Example |
 | --- | --- | --- | --- |
 | `ariaLabel` | `string`, default `placeholder` | Labels the field when no visible label is connected. | `<ForeFill ariaLabel="Compose reply" />` |
+| `ariaLabelledBy` | `string` | Uses an external visible label as the accessible name. | `<ForeFill ariaLabelledBy="reply-label" />` |
+| `ariaDescribedBy` | `string` | Merges external helper/error text with ForeFill's internal helper description. | `<ForeFill ariaDescribedBy="reply-help" />` |
 | `showHelper` | `boolean \| 'idle'`, default `false` | Shows the inline keyboard helper immediately, after idle, or never. | `<ForeFill showHelper="idle" />` |
 | `helperIdleMs` | `number`, default `900` | Controls the idle delay when `showHelper="idle"`. | `<ForeFill showHelper="idle" helperIdleMs={1200} />` |
 | `helperText` | `ReactNode`, default built-in helper | Replaces the helper copy with custom React content. | `<ForeFill showHelper helperText="Tab accepts" />` |
@@ -704,7 +814,7 @@ Every public prop below includes its use and a short example.
 | Prop | Type / default | Use | Example |
 | --- | --- | --- | --- |
 | `className` | `string` | Styles the root wrapper and scopes CSS variable overrides. | `<ForeFill className="reply-field" />` |
-| `editorClassName` | `string` | Styles the editable textarea, input, or richtext element. | `<ForeFill editorClassName="reply-editor" />` |
+| `editorClassName` | `string` | Styles the editable textarea, input, or contenteditable element. | `<ForeFill editorClassName="reply-editor" />` |
 | `variant` | `'outline' \| 'filled' \| 'underline'`, default `'outline'` | Chooses the built-in border/fill treatment. | `<ForeFill variant="filled" />` |
 | `size` | `'sm' \| 'md' \| 'lg'`, default `'md'` | Adjusts font size, padding, and minimum height. | `<ForeFill size="lg" />` |
 | `theme` | `'light' \| 'dark'` | Forces a color scheme; omit it to follow system preference. | `<ForeFill theme="dark" />` |
@@ -773,7 +883,10 @@ function CustomAutosuggest({ suggestions }: { suggestions: string[] }) {
 ```ts
 type UseSuggestionsOptions = {
   suggestions?: string[];
-  asyncFetcher?: (query: string) => Promise<string[]>;
+  asyncFetcher?: (
+    query: string,
+    context?: { signal: AbortSignal }
+  ) => Promise<string[]>;
   minQueryLength?: number;
   debounceMs?: number;
   matchMode?: 'startsWith' | 'substring' | 'fuzzy';
@@ -788,7 +901,7 @@ type UseSuggestionsResult = {
 | Option / result | Use | Example |
 | --- | --- | --- |
 | `suggestions` | Static list filtered on the client. | `useSuggestions(query, { suggestions })` |
-| `asyncFetcher` | Async source; replaces static filtering. | `useSuggestions(query, { asyncFetcher: fetchSuggestions })` |
+| `asyncFetcher` | Async source with an AbortSignal; replaces static filtering. | `useSuggestions(query, { asyncFetcher: fetchSuggestions })` |
 | `minQueryLength` | Returns no matches until the trimmed query is long enough. | `useSuggestions(query, { minQueryLength: 2 })` |
 | `debounceMs` | Debounces async queries. | `useSuggestions(query, { asyncFetcher, debounceMs: 250 })` |
 | `matchMode` | Supports `startsWith`, `substring`, and hook-only `fuzzy`. | `useSuggestions(query, { matchMode: 'fuzzy' })` |
@@ -821,12 +934,29 @@ The package build emits:
 dist/index.js
 dist/index.cjs
 dist/index.d.ts
+dist/**/*.d.ts
 dist/styles.css
 ```
 
+`npm run pack:dry` should include those library artifacts plus `README.md`,
+`LICENSE`, and `package.json`. It should not include demo assets such as
+`ForeFill.svg`, `ForeFill.json`, or `favicon.svg`.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| No ghost appears | Make sure the field is focused, the caret is at the end, the query meets `minQueryLength`, and `disableInlineFill` is not set. |
+| `Enter` accepts when it should only commit | Set `acceptOnEnter={false}`; `Tab` will still accept visible hints. |
+| Async results look stale | Use the `signal` passed to `asyncSuggestions` / `asyncFetcher` in your `fetch` call. ForeFill aborts old requests when the query changes. |
+| Screen readers do not announce your label | Use `ariaLabel` for unlabeled fields or `ariaLabelledBy` to point at a visible label ID. |
+| Error/helper text is not announced | Pass the external text ID with `ariaDescribedBy`; ForeFill merges it with its own helper description. |
+| `contenteditable` does not submit in a form | `contenteditable` is not a native form control. Mirror the value into a hidden input if you need native form submission. |
+| Hint disappears near `maxLength` | Accepted completions that would exceed native `maxLength` are intentionally suppressed. |
+
 ## Publish Checklist
 
-1. Update `author`, `repository`, and `homepage` in `package.json`.
+1. Confirm `author`, `repository`, and `homepage` in `package.json`.
 2. Run `npm run build`.
 3. Run `npm run pack:dry`.
 4. Install the generated `.tgz` in a separate React app.

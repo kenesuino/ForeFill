@@ -2,17 +2,24 @@
   "name": "forefill",
   "private": false,
   "version": "0.1.0",
-  "description": "ForeFill — inline ghost-text autocomplete for React textareas, textboxes, and contenteditable richtext surfaces.",
+  "description": "ForeFill — inline ghost-text autocomplete for React textareas, textboxes, and contenteditable surfaces.",
   "type": "module",
   "license": "MIT",
   "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kenesuino/ForeFill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kenesuino/ForeFill/issues"
+  },
+  "homepage": "https://kenesuino.github.io/ForeFill/",
   "keywords": [
     "react",
     "forefill",
     "ghost-text",
     "textarea",
     "textbox",
-    "richtext",
     "contenteditable",
     "autocomplete",
     "autosuggest",

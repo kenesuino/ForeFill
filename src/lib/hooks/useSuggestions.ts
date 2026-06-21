@@ -4,11 +4,21 @@ import { filterMatches, type MatchMode } from '../utils/filterMatches';
 
 export type { MatchMode };
 
+export interface AsyncSuggestionContext {
+  /** Abort signal for the current async request. */
+  signal: AbortSignal;
+}
+
+export type AsyncSuggestionFetcher = (
+  query: string,
+  context?: AsyncSuggestionContext
+) => Promise<string[]>;
+
 export interface UseSuggestionsOptions {
   /** Static suggestion list. Ignored when `asyncFetcher` is set. */
   suggestions?: string[];
   /** Async fetcher. Takes precedence over `suggestions`. */
-  asyncFetcher?: (query: string) => Promise<string[]>;
+  asyncFetcher?: AsyncSuggestionFetcher;
   /** Minimum trimmed query length before matches are computed. Default 1. */
   minQueryLength?: number;
   /** Debounce delay in ms (applied to async queries). Default 0. */
@@ -41,7 +51,7 @@ export function useSuggestions(
     matchMode = 'substring',
   } = options;
 
-  const debouncedQuery = useDebouncedValue(query, debounceMs);
+  const debouncedQuery = useDebouncedValue(query, asyncFetcher ? debounceMs : 0);
   const [asyncMatches, setAsyncMatches] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -57,36 +67,47 @@ export function useSuggestions(
       setIsLoading(false);
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
+    setAsyncMatches([]);
     setIsLoading(true);
-    asyncFetcher(q)
+    asyncFetcher(q, { signal: controller.signal })
       .then((res) => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setAsyncMatches(res);
           setIsLoading(false);
         }
       })
       .catch(() => {
-        if (!cancelled) setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setAsyncMatches([]);
+          setIsLoading(false);
+        }
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [asyncFetcher, debouncedQuery, minQueryLength]);
 
   return useMemo<UseSuggestionsResult>(() => {
-    const q = debouncedQuery.trim();
+    if (asyncFetcher) {
+      const q = debouncedQuery.trim();
+      if (q.length < minQueryLength) {
+        return { matches: [], isLoading: false };
+      }
+      return { matches: asyncMatches, isLoading };
+    }
+
+    const q = query.trim();
     if (q.length < minQueryLength) {
       return { matches: [], isLoading: false };
     }
-    if (asyncFetcher) {
-      return { matches: asyncMatches, isLoading };
-    }
+
     return {
       matches: filterMatches(q, suggestions, matchMode),
       isLoading: false,
     };
   }, [
+    query,
     debouncedQuery,
     minQueryLength,
     asyncFetcher,

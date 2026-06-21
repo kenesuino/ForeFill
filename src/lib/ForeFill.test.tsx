@@ -29,6 +29,19 @@ describe('ForeFill — rendering', () => {
     render(<ForeFill as="input" suggestions={REPLIES} placeholder="Search" />);
     expect(screen.getByRole('textbox').tagName).toBe('INPUT');
   });
+
+  it('renders a contenteditable textbox when as="contenteditable"', () => {
+    render(
+      <ForeFill
+        as="contenteditable"
+        suggestions={REPLIES}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    expect(field.tagName).toBe('DIV');
+    expect(field).toHaveAttribute('contenteditable', 'true');
+  });
 });
 
 describe('ForeFill — inline ghost', () => {
@@ -539,8 +552,122 @@ describe('ForeFill — existing text completion', () => {
     await user.click(field);
     await user.type(field, 'Thanks');
 
-    await waitFor(() => expect(fetcher).toHaveBeenCalledWith('Thanks'));
-    expect(fetcher).not.toHaveBeenCalledWith('Existing text. Thanks');
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenCalledWith('Thanks', expect.any(Object))
+    );
+    expect(fetcher).not.toHaveBeenCalledWith(
+      'Existing text. Thanks',
+      expect.any(Object)
+    );
+  });
+});
+
+describe('ForeFill â€” v0.1 polish regressions', () => {
+  it('merges external label and description ids with the internal helper id', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <span id="reply-label">Reply label</span>
+        <span id="reply-help">Reply help</span>
+        <ForeFill
+          suggestions={REPLIES}
+          ariaLabel="Ignored label"
+          ariaLabelledBy="reply-label"
+          ariaDescribedBy="reply-help"
+          showHelper
+          placeholder="Reply"
+        />
+      </>
+    );
+
+    const field = screen.getByRole('textbox', { name: 'Reply label' });
+    expect(field).not.toHaveAttribute('aria-label');
+
+    await user.click(field);
+    await user.type(field, 'Thanks');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    const describedBy = field.getAttribute('aria-describedby') ?? '';
+    expect(describedBy.split(/\s+/)).toContain('reply-help');
+    expect(describedBy.split(/\s+/)).toHaveLength(2);
+  });
+
+  it('autofocuses contenteditable surfaces', async () => {
+    render(
+      <ForeFill
+        as="contenteditable"
+        suggestions={REPLIES}
+        autoFocus
+        placeholder="Reply"
+      />
+    );
+
+    const field = screen.getByRole('textbox');
+    await waitFor(() => expect(document.activeElement).toBe(field));
+  });
+
+  it('suppresses hints whose accepted value would exceed maxLength', async () => {
+    const user = userEvent.setup();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        maxLength={8}
+        placeholder="Reply"
+      />
+    );
+
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Thanks');
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.querySelector('.ff-ghost')).toBeNull();
+  });
+
+  it('announces Tab-only accept behavior when acceptOnEnter is false', async () => {
+    const user = userEvent.setup();
+    render(
+      <ForeFill
+        suggestions={REPLIES}
+        acceptOnEnter={false}
+        showHelper
+        placeholder="Reply"
+      />
+    );
+
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Tab accepts the hint. Enter commits typed text.'
+      )
+    );
+    expect(screen.getAllByText(/Enter commits typed text/).length).toBeGreaterThan(0);
+  });
+
+  it('does not call normal async suggestions while trigger suggestions are active', async () => {
+    const user = userEvent.setup();
+    const fetcher = vi.fn(async () => ['normal async']);
+    render(
+      <ForeFill
+        as="input"
+        asyncSuggestions={fetcher}
+        triggerSuggestions={[
+          { trigger: '@', suggestions: ['gmail.com', 'yahoo.com'] },
+        ]}
+        placeholder="Email"
+      />
+    );
+
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    fireEvent.change(field, { target: { value: '@' } });
+
+    await waitFor(() => expect(ghostSuffix()).toBe('gmail.com'));
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });
 

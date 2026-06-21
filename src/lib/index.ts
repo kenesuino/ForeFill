@@ -19,6 +19,8 @@ export type {
 // Hooks (reusable across future components)
 export { useSuggestions } from './hooks/useSuggestions';
 export type {
+  AsyncSuggestionContext,
+  AsyncSuggestionFetcher,
   UseSuggestionsOptions,
   UseSuggestionsResult,
 } from './hooks/useSuggestions';

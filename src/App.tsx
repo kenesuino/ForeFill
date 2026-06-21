@@ -4,12 +4,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
   type ReactNode,
 } from 'react';
 import Lottie from 'lottie-react';
 import {
   BookOpen,
   Check,
+  ChevronDown,
   CircleHelp,
   Clipboard,
   Code2,
@@ -24,6 +26,7 @@ import {
 } from 'lucide-react';
 import {
   ForeFill,
+  type ForeFillHandle,
   type ForeFillMatchMode,
   type ForeFillSize,
   type ForeFillSurface,
@@ -45,6 +48,16 @@ type ThemeChoice = 'auto' | 'light' | 'dark';
 type ShowHelperMode = 'idle' | 'true' | 'false';
 type StatusMode = 'idle' | 'loading' | 'success' | 'error';
 type TriggerMode = 'all' | 'email' | 'happy' | 'symbols' | 'none';
+type PlaygroundPresetId = 'reply' | 'email' | 'async' | 'note' | 'validation';
+interface HeroTravelStyle {
+  position: 'fixed';
+  top: number;
+  left: number;
+  width: number;
+  opacity: number;
+  pointerEvents: 'none';
+  zIndex: number;
+}
 
 interface PlaygroundState {
   as: ForeFillSurface;
@@ -78,6 +91,20 @@ interface PlaygroundState {
   disabled: boolean;
 }
 
+interface PlaygroundEvent {
+  id: number;
+  name: string;
+  value: string;
+}
+
+interface PlaygroundPreset {
+  id: PlaygroundPresetId;
+  label: string;
+  description: string;
+  state: Partial<PlaygroundState>;
+  suggestions?: string[];
+}
+
 interface ApiProp {
   name: string;
   type: string;
@@ -88,7 +115,7 @@ interface ApiProp {
 }
 
 const PAGE_LINKS: Array<{ page: Page; hash: string; label: string }> = [
-  { page: 'hero', hash: '#hero', label: 'Hero' },
+  { page: 'hero', hash: '#hero', label: 'Home' },
   { page: 'documentation', hash: '#documentation', label: 'Documentation' },
   { page: 'playground', hash: '#playground', label: 'Playground' },
 ];
@@ -102,6 +129,21 @@ const GUIDE_SECTIONS = [
   { id: 'surfaces', label: 'Surfaces' },
   { id: 'styling', label: 'Styling' },
   { id: 'accessibility', label: 'Accessibility' },
+];
+
+const DOC_OVERVIEW = [
+  {
+    title: 'Install',
+    text: 'Add the package and stylesheet once at the app boundary.',
+  },
+  {
+    title: 'Integrate',
+    text: 'Start with static phrases, then add trigger or async sources.',
+  },
+  {
+    title: 'Tune',
+    text: 'Adjust behavior, status, styling, and native form props.',
+  },
 ];
 
 const DEFAULT_SUGGESTIONS = [
@@ -133,6 +175,113 @@ const TRIGGER_PRESETS: Record<Exclude<TriggerMode, 'none'>, ForeFillTriggerSugge
     { trigger: '&', suggestions: [' shipping', ' handling', ' returns'] },
   ],
 };
+
+const PLAYGROUND_DEFAULT_STATE: PlaygroundState = {
+  as: 'textarea',
+  placeholder: 'Write a reply...',
+  rows: 3,
+  inputType: 'text',
+  ariaLabel: 'Compose a reply',
+  variant: 'outline',
+  size: 'md',
+  themeChoice: 'auto',
+  matchMode: 'substring',
+  minQueryLength: 1,
+  debounceMs: 0,
+  asyncMode: false,
+  triggerMode: 'all',
+  disableInlineFill: false,
+  enableArrowNavigation: true,
+  acceptOnEnter: true,
+  commitOnBlur: false,
+  partialAccept: true,
+  showHelper: 'idle',
+  helperIdleMs: 900,
+  helperText: '',
+  status: 'idle',
+  name: '',
+  id: '',
+  required: false,
+  readOnly: false,
+  maxLength: 0,
+  autoFocus: false,
+  disabled: false,
+};
+
+const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
+  {
+    id: 'reply',
+    label: 'Reply',
+    description: 'Textarea with static phrases and trigger completions.',
+    state: {},
+  },
+  {
+    id: 'email',
+    label: 'Email',
+    description: 'Single-line email input with domain completions.',
+    state: {
+      as: 'input',
+      inputType: 'email',
+      placeholder: 'alex@g',
+      ariaLabel: 'Email address',
+      triggerMode: 'email',
+      matchMode: 'startsWith',
+      showHelper: 'true',
+    },
+  },
+  {
+    id: 'async',
+    label: 'Async Search',
+    description: 'Debounced async source with loading state.',
+    state: {
+      as: 'input',
+      placeholder: 'Search saved replies...',
+      ariaLabel: 'Search saved replies',
+      asyncMode: true,
+      triggerMode: 'none',
+      debounceMs: 300,
+      matchMode: 'substring',
+      showHelper: 'false',
+    },
+  },
+  {
+    id: 'note',
+    label: 'Contenteditable Note',
+    description: 'Plain-text contenteditable editor with multiline hints.',
+    state: {
+      as: 'contenteditable',
+      placeholder: 'Draft a note...',
+      ariaLabel: 'Draft note',
+      rows: 6,
+      triggerMode: 'happy',
+      showHelper: 'idle',
+    },
+    suggestions: [
+      'Project update: the first draft is ready for review.',
+      'Next steps: confirm scope, assign owners, and schedule follow-up.',
+      'Happy to help - I can take the first pass.',
+      'Please add notes directly in this thread.',
+    ],
+  },
+  {
+    id: 'validation',
+    label: 'Validation/Form',
+    description: 'Required native form field with error treatment.',
+    state: {
+      as: 'input',
+      placeholder: 'Required reply',
+      ariaLabel: 'Required reply',
+      triggerMode: 'none',
+      status: 'error',
+      required: true,
+      name: 'reply',
+      id: 'reply-field',
+      maxLength: 80,
+      acceptOnEnter: false,
+      commitOnBlur: true,
+    },
+  },
+];
 
 const HERO_TYPING_ITEMS = [
   {
@@ -175,7 +324,7 @@ const HERO_TYPING_ITEMS = [
 const API_PROPS: ApiProp[] = [
   {
     name: 'as',
-    type: "'textarea' | 'input' | 'richtext'",
+    type: "'textarea' | 'input' | 'contenteditable'",
     def: "'textarea'",
     desc: 'Editable surface to render.',
     purpose: 'Switches between multiline text, single-line input, and a plain-text contenteditable surface.',
@@ -199,10 +348,10 @@ const API_PROPS: ApiProp[] = [
   },
   {
     name: 'asyncSuggestions',
-    type: '(query: string) => Promise<string[]>',
+    type: '(query: string, context?: { signal: AbortSignal }) => Promise<string[]>',
     def: '-',
     desc: 'Async suggestion source. Overrides suggestions.',
-    purpose: 'Receives the active typed query, including appended text after an existing value.',
+    purpose: 'Receives the active typed query and an AbortSignal for cancelling stale requests.',
     example: '<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={250} />',
   },
   {
@@ -242,7 +391,7 @@ const API_PROPS: ApiProp[] = [
     type: 'string',
     def: "'Type to search...'",
     desc: 'Editable surface placeholder.',
-    purpose: 'Sets the native placeholder or richtext placeholder text.',
+    purpose: 'Sets the native placeholder or contenteditable placeholder text.',
     example: '<ForeFill placeholder="Write a reply..." />',
   },
   {
@@ -258,7 +407,7 @@ const API_PROPS: ApiProp[] = [
     type: 'string',
     def: '-',
     desc: 'Class for the editable surface.',
-    purpose: 'Style the textarea, input, or richtext element directly.',
+    purpose: 'Style the textarea, input, or contenteditable element directly.',
     example: '<ForeFill editorClassName="reply-editor" />',
   },
   {
@@ -356,6 +505,22 @@ const API_PROPS: ApiProp[] = [
     desc: 'Accessible label for the field.',
     purpose: 'Use when the visual label is outside the component or absent.',
     example: '<ForeFill ariaLabel="Compose reply" />',
+  },
+  {
+    name: 'ariaLabelledBy',
+    type: 'string',
+    def: '-',
+    desc: 'ID of an external label element.',
+    purpose: 'Use when a visible label should provide the accessible field name.',
+    example: '<label id="reply-label">Reply</label><ForeFill ariaLabelledBy="reply-label" />',
+  },
+  {
+    name: 'ariaDescribedBy',
+    type: 'string',
+    def: '-',
+    desc: 'ID of external helper or error text.',
+    purpose: 'Merged with ForeFill internal helper text when both are present.',
+    example: '<ForeFill ariaDescribedBy="reply-error" status="error" />',
   },
   {
     name: 'showHelper',
@@ -528,6 +693,178 @@ function useHashPage(): Page {
   return page;
 }
 
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function useScrollHandoffProgress(targetRef: RefObject<HTMLElement>) {
+  const [progress, setProgress] = useState(0);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    let frame = 0;
+
+    const update = () => {
+      frame = 0;
+      const reduced = media?.matches ?? false;
+      setPrefersReducedMotion(reduced);
+
+      if (reduced) {
+        setProgress(0);
+        return;
+      }
+
+      const node = targetRef.current;
+      if (!node) return;
+
+      const top = node.getBoundingClientRect().top;
+      const height = window.innerHeight || 1;
+      const start = height * 0.92;
+      const end = height * 0.25;
+      const next = clamp01((start - top) / (start - end));
+
+      setProgress((current) =>
+        Math.abs(current - next) < 0.004 ? current : next
+      );
+    };
+
+    const requestUpdate = () => {
+      if (frame !== 0) return;
+      frame = window.requestAnimationFrame(update);
+    };
+
+    const handleMotionChange = () => requestUpdate();
+
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', requestUpdate);
+    media?.addEventListener?.('change', handleMotionChange);
+    requestUpdate();
+
+    return () => {
+      window.removeEventListener('scroll', requestUpdate);
+      window.removeEventListener('resize', requestUpdate);
+      media?.removeEventListener?.('change', handleMotionChange);
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+    };
+  }, [targetRef]);
+
+  return { progress, prefersReducedMotion };
+}
+
+function useElementInView(targetRef: RefObject<Element>, threshold = 0.3) {
+  const [isInView, setIsInView] = useState(true);
+
+  useEffect(() => {
+    const node = targetRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsInView(Boolean(entry?.isIntersecting)),
+      { threshold }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [targetRef, threshold]);
+
+  return isInView;
+}
+
+function useHeroTravel({
+  heroAnchorRef,
+  heroCardRef,
+  targetCardRef,
+  progress,
+  prefersReducedMotion,
+}: {
+  heroAnchorRef: RefObject<HTMLDivElement>;
+  heroCardRef: RefObject<HTMLDivElement>;
+  targetCardRef: RefObject<HTMLDivElement>;
+  progress: number;
+  prefersReducedMotion: boolean;
+}) {
+  const [cardStyle, setCardStyle] = useState<HeroTravelStyle | null>(null);
+  const [anchorHeight, setAnchorHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    const card = heroCardRef.current;
+    if (!card) return;
+    const observer = new ResizeObserver((entries) => {
+      const height = entries[0]?.contentRect.height;
+      if (height && height > 0) setAnchorHeight(height);
+    });
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [heroCardRef]);
+
+  useEffect(() => {
+    if (prefersReducedMotion || progress <= 0.004) {
+      setCardStyle(null);
+      return;
+    }
+
+    let frame = 0;
+
+    const update = () => {
+      frame = 0;
+      const anchor = heroAnchorRef.current;
+      const target = targetCardRef.current;
+      if (!anchor || !target) {
+        setCardStyle(null);
+        return;
+      }
+
+      const from = anchor.getBoundingClientRect();
+      const to = target.getBoundingClientRect();
+      if (from.width <= 0 || to.width <= 0) return;
+
+      const t = clamp01(progress);
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+      const fadeStart = 0.88;
+      const fadeT = t < fadeStart ? 0 : (t - fadeStart) / (1 - fadeStart);
+      const fadeEased = clamp01(fadeT);
+
+      const width = lerp(from.width, to.width, eased);
+      const top = lerp(from.top, to.top, eased);
+      const left = lerp(from.left, to.left + (to.width - width) / 2, eased);
+      const opacity = 1 - fadeEased;
+
+      setCardStyle({
+        position: 'fixed',
+        top,
+        left,
+        width,
+        opacity,
+        pointerEvents: 'none',
+        zIndex: 30,
+      });
+    };
+
+    const requestUpdate = () => {
+      if (frame !== 0) return;
+      frame = window.requestAnimationFrame(update);
+    };
+
+    requestUpdate();
+    window.addEventListener('scroll', requestUpdate, { passive: true });
+    window.addEventListener('resize', requestUpdate);
+
+    return () => {
+      window.removeEventListener('scroll', requestUpdate);
+      window.removeEventListener('resize', requestUpdate);
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+    };
+  }, [heroAnchorRef, heroCardRef, targetCardRef, progress, prefersReducedMotion]);
+
+  return { cardStyle, anchorHeight };
+}
+
+function lerp(start: number, end: number, progress: number) {
+  return start + (end - start) * progress;
+}
+
 export default function App() {
   const page = useHashPage();
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
@@ -614,7 +951,7 @@ function TopNav({
     <header className="sticky top-0 z-40 border-b border-[#D7DEE9] bg-white/85 backdrop-blur dark:border-white/10 dark:bg-[#10131A]/85">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <a href="#hero" className="flex items-center gap-3">
-          <img src={LOGO_URL} alt="" className="h-8 w-14 dark:invert" />
+          <img src={LOGO_URL} alt="" className="h-8 w-14" />
           <span className="font-extrabold tracking-tight">
             Fore<span className="text-[#6F84B2]">Fill</span>
           </span>
@@ -661,66 +998,174 @@ function TopNav({
 }
 
 function HeroPage({ theme }: { theme: ThemeMode }) {
+  const heroAnchorRef = useRef<HTMLDivElement>(null);
+  const heroCardRef = useRef<HTMLDivElement>(null);
+  const liveSamplesRef = useRef<HTMLElement>(null);
+  const triggerCardRef = useRef<HTMLDivElement>(null);
+  const triggerSampleRef = useRef<ForeFillHandle>(null);
+  const [isActivating, setIsActivating] = useState(false);
+  const isHeroSampleInView = useElementInView(heroCardRef, 0.35);
+  const { progress: handoffProgress, prefersReducedMotion } =
+    useScrollHandoffProgress(liveSamplesRef);
+  const { cardStyle: heroCardStyle, anchorHeight } = useHeroTravel({
+    heroAnchorRef,
+    heroCardRef,
+    targetCardRef: triggerCardRef,
+    progress: handoffProgress,
+    prefersReducedMotion,
+  });
+
+  const handleHeroSampleActivate = useCallback(() => {
+    setIsActivating(true);
+    liveSamplesRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
+    window.setTimeout(
+      () => {
+        triggerSampleRef.current?.focus();
+        setIsActivating(false);
+      },
+      prefersReducedMotion ? 120 : 900
+    );
+  }, [liveSamplesRef, prefersReducedMotion, triggerSampleRef]);
+
+  const heroAnchorStyle = anchorHeight ? { height: anchorHeight } : undefined;
+
   return (
     <main id="hero">
-      <section className="border-b border-[#D7DEE9] bg-white dark:border-white/10 dark:bg-[#151923]">
-        <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:px-8 lg:py-20">
-          <div className="flex flex-col justify-center">
-            <div className="mb-6 flex items-center gap-4">
-              <img src={LOGO_URL} alt="" className="h-14 w-24 dark:invert" />
-              <span className="rounded-md border border-[#D7DEE9] px-2 py-1 text-xs font-bold text-[#526078] dark:border-white/10 dark:text-[#A8B3C7]">
+      <section className="border-b border-[#D7DEE9] bg-[#F8FAFC] dark:border-white/10 dark:bg-[#11151D]">
+        <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(31rem,1.1fr)] lg:items-center lg:px-8 lg:py-16">
+          <div className="max-w-2xl">
+            <div className="mb-7">
+              <span className="inline-flex rounded-md border border-[#D7DEE9] bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-[#526078] shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-[#A8B3C7]">
                 React inline autocomplete
               </span>
             </div>
-            <p className="text-2xl font-black tracking-tight sm:text-3xl">
+
+            <h1 className="text-5xl font-black tracking-tight text-[#07154D] dark:text-white sm:text-6xl">
               Fore<span className="text-[#6F84B2]">Fill</span>
-            </p>
-            <h1 className="mt-3 text-5xl font-black tracking-tight text-[#07154D] dark:text-white sm:text-6xl">
-              Finish the sentence{' '}
-              <span className="bg-gradient-to-r from-[#6F84B2] via-[#8398C1] to-[#A2B2D2] bg-clip-text text-transparent">
-                before you type it
-              </span>
             </h1>
-            <p className="mt-5 max-w-2xl text-lg leading-8 text-[#526078] dark:text-[#A8B3C7]">
-              Ghost-text autocomplete for React textareas, inputs, and richtext
-              fields. Watch it type, suggest, and accept completions using the same
-              component you ship.
+            <p className="mt-4 max-w-xl text-xl font-extrabold leading-8 text-[#1F2A44] dark:text-[#DDE6F6]">
+              Production-ready ghost text for React forms.
             </p>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#526078] dark:text-[#A8B3C7]">
+              Add inline completions to inputs, textareas, and contenteditable editors with
+              trigger-aware suggestions, async sources, and accessible keyboard
+              behavior built in.
+            </p>
+
             <div className="mt-8 flex flex-wrap gap-3">
               <a href="#documentation" className="inline-flex items-center gap-2 rounded-md bg-[#6F84B2] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#5A6F9C]">
                 <BookOpen className="h-4 w-4" />
-                Documentation
+                Read the docs
               </a>
-              <a href="#playground" className="inline-flex items-center gap-2 rounded-md border border-[#D7DEE9] px-4 py-2.5 text-sm font-bold text-[#07154D] transition hover:bg-[#EEF2F7] dark:border-white/10 dark:text-white dark:hover:bg-white/10">
+              <a href="#playground" className="inline-flex items-center gap-2 rounded-md border border-[#C9D3E1] bg-white px-4 py-2.5 text-sm font-bold text-[#07154D] transition hover:bg-[#EEF2F7] dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10">
                 <Play className="h-4 w-4" />
-                Playground
+                Open playground
               </a>
+            </div>
+
+            <div className="mt-9 grid gap-3 text-sm sm:grid-cols-3">
+              {[
+                ['Surfaces', 'input, textarea, contenteditable'],
+                ['Suggestions', 'static, trigger, async'],
+                ['Controls', 'keyboard-first by default'],
+              ].map(([label, text]) => (
+                <div key={label} className="border-l-2 border-[#A2B2D2] pl-3">
+                  <p className="font-black text-[#07154D] dark:text-white">{label}</p>
+                  <p className="mt-1 leading-5 text-[#526078] dark:text-[#A8B3C7]">{text}</p>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="content-start">
-            <HeroTypingShowcase theme={theme} />
+          <div className="content-start lg:pl-4">
+            <div ref={heroAnchorRef} style={heroAnchorStyle}>
+              <div
+                ref={heroCardRef}
+                className="rounded-md outline-none transition-[box-shadow,opacity] duration-200"
+                style={heroCardStyle ?? undefined}
+              >
+                <HeroTypingShowcase
+                  theme={theme}
+                  active={isHeroSampleInView && handoffProgress < 0.96 && !isActivating}
+                />
+              </div>
+            </div>
           </div>
+        </div>
+        <div className="flex justify-center pt-4">
+          <button
+            type="button"
+            onClick={handleHeroSampleActivate}
+            aria-label="Scroll down to try the live ForeFill samples"
+            className="group flex cursor-pointer flex-col items-center gap-1 rounded-md bg-transparent py-2 outline-none transition focus-visible:ring-2 focus-visible:ring-[#6F84B2] focus-visible:ring-offset-4 focus-visible:ring-offset-[#F8FAFC] dark:focus-visible:ring-offset-[#11151D]"
+            style={{ opacity: Math.max(0, 1 - handoffProgress * 3) }}
+          >
+            <ChevronDown className="ff-arrow-bounce h-7 w-7 text-[#6F84B2] transition group-hover:text-[#5A6F9C] dark:text-[#A2B2D2] dark:group-hover:text-white" />
+            <span className="text-sm font-bold uppercase tracking-wider text-[#6F84B2] transition group-hover:text-[#5A6F9C] dark:text-[#A2B2D2] dark:group-hover:text-white">
+              Try here
+            </span>
+          </button>
         </div>
       </section>
 
-      <SampleSection theme={theme} />
+      <SampleSection
+        theme={theme}
+        sectionRef={liveSamplesRef}
+        triggerCardRef={triggerCardRef}
+        triggerSampleRef={triggerSampleRef}
+        handoffProgress={handoffProgress}
+        prefersReducedMotion={prefersReducedMotion}
+      />
 
-      <section className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-8 sm:grid-cols-3 sm:px-6 lg:px-8">
-        <Feature icon={<WandSparkles className="h-5 w-5" />} title="Any trigger" text="@, $, &, words, or your own custom strings." />
-        <Feature icon={<Zap className="h-5 w-5" />} title="Existing text" text="Only the newly typed segment is completed." />
-        <Feature icon={<SlidersHorizontal className="h-5 w-5" />} title="Full playground" text="Every API prop is documented next to live controls." />
+      <section className="mx-auto flex w-full max-w-7xl flex-col items-center gap-6 px-4 py-16 text-center sm:px-6 lg:px-8">
+        <LottieFromUrl
+          src={LOT_URL}
+          className="h-[140px] w-[240px] sm:h-[180px] sm:w-[310px]"
+        />
+        <div>
+          <p className="text-3xl font-black tracking-tight sm:text-4xl">
+            <span className="text-[#07154D] dark:text-white">Fore</span>
+            <span className="bg-gradient-to-r from-[#6F84B2] via-[#8398C1] to-[#A2B2D2] bg-clip-text text-transparent">
+              Fill
+            </span>
+          </p>
+          <p className="mx-auto mt-4 max-w-xl text-base font-semibold leading-7 text-[#526078] dark:text-[#A8B3C7]">
+            Type a little, let ForeFill finish the rest. Inline ghost-text
+            autocomplete for React inputs, textareas, and contenteditable editors -
+            trigger-aware, async-ready, and keyboard-first by default.
+          </p>
+        </div>
       </section>
     </main>
   );
 }
 
-function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
+function HeroTypingShowcase({
+  theme,
+  active = true,
+}: {
+  theme: ThemeMode;
+  active?: boolean;
+}) {
   const [index, setIndex] = useState(0);
   const [values, setValues] = useState({ to: '', subject: '', body: '' });
+  const toRef = useRef<ForeFillHandle>(null);
+  const subjectRef = useRef<ForeFillHandle>(null);
+  const bodyRef = useRef<ForeFillHandle>(null);
   const item = HERO_TYPING_ITEMS[index];
+  const activeFieldLabel =
+    item.field === 'to'
+      ? 'Email domain'
+      : item.field === 'subject'
+        ? 'Subject line'
+        : 'Reply text';
 
   useEffect(() => {
+    if (!active) return;
+
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const timers: number[] = [];
     const schedule = (fn: () => void, delay: number) => {
@@ -731,6 +1176,15 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
       setValues({ to: '', subject: '', body: '' });
     }
     setValues((current) => ({ ...current, [item.field]: '' }));
+    schedule(() => {
+      const activeRef =
+        item.field === 'to'
+          ? toRef
+          : item.field === 'subject'
+            ? subjectRef
+            : bodyRef;
+      activeRef.current?.focus();
+    }, 100);
 
     const chars = Array.from(item.seed);
     chars.forEach((_, charIndex) => {
@@ -754,24 +1208,28 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
     );
 
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [index, item.field, item.full, item.seed]);
+  }, [active, index, item.field, item.full, item.seed]);
 
   return (
-    <div className="overflow-hidden rounded-md border border-[#D1DBE8] bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-      <div className="flex items-center justify-between border-b border-[#D1DBE8] bg-[#F8FAFD] px-4 py-3 dark:border-white/10 dark:bg-white/5">
+    <div className="overflow-hidden rounded-md border border-[#C4D0DE] bg-white shadow-[0_24px_70px_-40px_rgba(15,23,42,0.45)] dark:border-white/10 dark:bg-white/5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#D1DBE8] bg-[#F8FAFD] px-4 py-3 dark:border-white/10 dark:bg-white/5">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-[#FF6B6B]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#F6C85F]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#6F84B2]" />
         </div>
-        <span className="text-xs font-bold uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
-          New message
-        </span>
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+          <span className="text-[#6F84B2] dark:text-[#A2B2D2]">Live compose</span>
+          <span className="rounded bg-[#EEF2F8] px-2 py-1 text-[#526078] dark:bg-white/10 dark:text-[#CAD3E3]">
+            {activeFieldLabel}
+          </span>
+        </div>
       </div>
 
       <div className="space-y-3 p-4">
         <ComposeRow label="To">
           <ForeFill
+            ref={toRef}
             as="input"
             inputType="email"
             value={values.to}
@@ -787,6 +1245,7 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
 
         <ComposeRow label="Subject">
           <ForeFill
+            ref={subjectRef}
             as="input"
             value={values.subject}
             onChange={(value) =>
@@ -803,6 +1262,7 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
 
         <div>
           <ForeFill
+            ref={bodyRef}
             as="textarea"
             value={values.body}
             onChange={(value) => setValues((current) => ({ ...current, body: value }))}
@@ -816,6 +1276,77 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
           />
         </div>
       </div>
+    </div>
+  );
+}
+
+function LiveEmailComposeSample({
+  theme,
+  firstFieldRef,
+}: {
+  theme: ThemeMode;
+  firstFieldRef: RefObject<ForeFillHandle>;
+}) {
+  return (
+    <div>
+      <div className="overflow-hidden rounded-md border border-[#C4D0DE] bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#D1DBE8] bg-[#F8FAFD] px-4 py-3 dark:border-white/10 dark:bg-white/5">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#FF6B6B]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#F6C85F]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#6F84B2]" />
+          </div>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+            <span className="text-[#6F84B2] dark:text-[#A2B2D2]">Live sample</span>
+            <span className="rounded bg-[#EEF2F8] px-2 py-1 text-[#526078] dark:bg-white/10 dark:text-[#CAD3E3]">
+              Try it here
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <ComposeRow label="To">
+            <ForeFill
+              ref={firstFieldRef}
+              as="input"
+              inputType="email"
+              suggestions={DEFAULT_SUGGESTIONS}
+              triggerSuggestions={TRIGGER_PRESETS.all}
+              placeholder="recipient@"
+              ariaLabel="Live compose recipient"
+              showHelper="idle"
+              theme={theme}
+            />
+          </ComposeRow>
+
+          <ComposeRow label="Subject">
+            <ForeFill
+              as="input"
+              suggestions={DEFAULT_SUGGESTIONS}
+              triggerSuggestions={TRIGGER_PRESETS.all}
+              placeholder="Type Happy"
+              ariaLabel="Live compose subject"
+              showHelper="idle"
+              theme={theme}
+            />
+          </ComposeRow>
+
+          <ForeFill
+            as="textarea"
+            suggestions={DEFAULT_SUGGESTIONS}
+            triggerSuggestions={TRIGGER_PRESETS.all}
+            placeholder="Write the message..."
+            ariaLabel="Live compose message"
+            rows={5}
+            showHelper="idle"
+            theme={theme}
+          />
+        </div>
+      </div>
+      <p className="mt-3 text-sm text-[#526078] dark:text-[#A8B3C7]">
+        Try <Code>@g</Code> in To, <Code>Happy</Code> in Subject, or{' '}
+        <Code>Thanks</Code> in the message.
+      </p>
     </div>
   );
 }
@@ -837,83 +1368,48 @@ function ComposeRow({
   );
 }
 
-function SampleSection({ theme }: { theme: ThemeMode }) {
-  const sectionRef = useRef<HTMLElement | null>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const node = sectionRef.current;
-    if (!node) return;
-
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) {
-      setVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.24 }
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+function SampleSection({
+  theme,
+  sectionRef,
+  triggerCardRef,
+  triggerSampleRef,
+  handoffProgress,
+  prefersReducedMotion,
+}: {
+  theme: ThemeMode;
+  sectionRef: RefObject<HTMLElement>;
+  triggerCardRef: RefObject<HTMLDivElement>;
+  triggerSampleRef: RefObject<ForeFillHandle>;
+  handoffProgress: number;
+  prefersReducedMotion: boolean;
+}) {
+  const sectionOpacity = prefersReducedMotion ? 1 : clamp01((handoffProgress - 0.88) / 0.12);
+  const sectionPointerEvents: 'auto' | 'none' = sectionOpacity >= 1 ? 'auto' : 'none';
 
   return (
     <section
+      id="live-samples"
       ref={sectionRef}
-      className={`border-b border-[#D7DEE9] bg-[#F7F8FB] px-4 py-12 transition duration-700 sm:px-6 lg:px-8 dark:border-white/10 dark:bg-[#10131A] ${
-        visible ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0'
-      }`}
+      className="scroll-mt-24 border-b border-[#D7DEE9] bg-[#F7F8FB] px-4 py-12 transition-opacity duration-200 ease-out sm:px-6 lg:px-8 dark:border-white/10 dark:bg-[#10131A]"
+      style={{ opacity: sectionOpacity, pointerEvents: sectionPointerEvents }}
     >
       <div className="mx-auto w-full max-w-7xl">
-        <div className="mb-6 max-w-2xl">
+        <div className="mx-auto mb-6 max-w-2xl text-center">
           <p className="text-sm font-black uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
-            Test ForeFill
+            Live samples
           </p>
           <h2 className="mt-2 text-3xl font-black tracking-tight text-[#07154D] dark:text-white">
-            Try both completion styles
+            Try the email compose sample
           </h2>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <DemoPanel title="Test triggers">
-            <ForeFill
-              as="input"
-              placeholder="Type @g, $t, & sh, or Happy"
-              ariaLabel="Trigger sample"
-              suggestions={DEFAULT_SUGGESTIONS}
-              triggerSuggestions={TRIGGER_PRESETS.all}
-              showHelper="idle"
+        <div className="mx-auto w-full max-w-4xl">
+          <div ref={triggerCardRef}>
+            <LiveEmailComposeSample
               theme={theme}
+              firstFieldRef={triggerSampleRef}
             />
-            <p className="mt-3 text-sm text-[#526078] dark:text-[#A8B3C7]">
-              Try <Code>@g</Code>, <Code>$t</Code>, <Code>& sh</Code>, or{' '}
-              <Code>Happy</Code>.
-            </p>
-          </DemoPanel>
-
-          <DemoPanel title="Test existing text">
-            <ForeFill
-              as="textarea"
-              defaultValue="Happy to help - let me take a look. "
-              placeholder="Type Thanks"
-              ariaLabel="Existing text sample"
-              suggestions={DEFAULT_SUGGESTIONS}
-              rows={4}
-              showHelper="idle"
-              theme={theme}
-            />
-            <p className="mt-3 text-sm text-[#526078] dark:text-[#A8B3C7]">
-              Type <Code>Thanks</Code> after the saved text, then accept the hint.
-            </p>
-          </DemoPanel>
+          </div>
         </div>
       </div>
     </section>
@@ -1023,17 +1519,31 @@ const DOC_CATEGORIES: DocCategory[] = [
     id: 'cat-styling',
     label: 'Styling hooks',
     icon: <Code2 className="h-5 w-5" />,
-    blurb: 'Class hooks for the root, editor, helper, and the accessible label.',
-    props: ['className', 'editorClassName', 'helperClassName', 'ariaLabel'],
+    blurb: 'Class hooks for the root, editor, helper, and accessible labels.',
+    props: [
+      'className',
+      'editorClassName',
+      'helperClassName',
+      'ariaLabel',
+      'ariaLabelledBy',
+      'ariaDescribedBy',
+    ],
   },
 ];
 
 const PROP_DEMOS: Record<string, PropDemo> = {
   // ----- Surfaces & content -------------------------------------------------
   as: {
-    control: { kind: 'select', options: ['textarea', 'input', 'richtext'], default: 'input' },
+    control: { kind: 'select', options: ['textarea', 'input', 'contenteditable'], default: 'input' },
     render: (value) => (
-      <ForeFill as={value as ForeFillSurface} suggestions={DEFAULT_SUGGESTIONS} placeholder={`${value} — type 'Thanks'`} showHelper="idle" />
+      <ForeFill
+        as={value as ForeFillSurface}
+        suggestions={DEFAULT_SUGGESTIONS}
+        placeholder={`${value} - type 'Thanks'`}
+        showHelper="idle"
+        className={value === 'contenteditable' ? 'ff-contenteditable-demo' : undefined}
+        editorClassName={value === 'contenteditable' ? 'ff-contenteditable-demo__editor' : undefined}
+      />
     ),
     code: (value) => `<ForeFill as="${value}" suggestions={suggestions} />`,
   },
@@ -1107,8 +1617,8 @@ const PROP_DEMOS: Record<string, PropDemo> = {
       value
         ? `<ForeFill
   debounceMs={250}
-  asyncSuggestions={async (query) => {
-    const res = await fetch('/api/suggest?q=' + query);
+  asyncSuggestions={async (query, { signal }) => {
+    const res = await fetch('/api/suggest?q=' + query, { signal });
     return res.json();
   }}
 />`
@@ -1236,7 +1746,7 @@ const PROP_DEMOS: Record<string, PropDemo> = {
     render: (value) => (
       <div
         data-theme={String(value)}
-        className={value === 'dark' ? 'rounded-xl bg-[#10131A] p-3' : 'rounded-xl border border-[#D7DEE9] bg-white p-3'}
+        className={value === 'dark' ? 'rounded-md bg-[#10131A] p-3' : 'rounded-md border border-[#D7DEE9] bg-white p-3'}
       >
         <ForeFill suggestions={DEFAULT_SUGGESTIONS} theme={value as 'light' | 'dark'} placeholder="Type 'Thanks'" showHelper="idle" />
       </div>
@@ -1351,11 +1861,35 @@ const PROP_DEMOS: Record<string, PropDemo> = {
     ),
     code: (value) => `<ForeFill as="input" ariaLabel="${value}" />`,
   },
+  ariaLabelledBy: {
+    control: { kind: 'text', default: 'reply-label' },
+    render: (value) => (
+      <div className="space-y-2">
+        <label id={String(value)} className="block text-sm font-bold text-[#33415C] dark:text-[#CAD3E3]">
+          Visible reply label
+        </label>
+        <ForeFill as="input" ariaLabelledBy={String(value)} suggestions={DEFAULT_SUGGESTIONS} placeholder="Type 'Thanks'" showHelper={false} />
+      </div>
+    ),
+    code: (value) => `<label id="${value}">Reply</label>\n<ForeFill as="input" ariaLabelledBy="${value}" />`,
+  },
+  ariaDescribedBy: {
+    control: { kind: 'text', default: 'reply-help' },
+    render: (value) => (
+      <div className="space-y-2">
+        <ForeFill as="input" ariaDescribedBy={String(value)} suggestions={DEFAULT_SUGGESTIONS} placeholder="Type 'Thanks'" showHelper="idle" />
+        <p id={String(value)} className="text-xs text-[#526078] dark:text-[#A8B3C7]">
+          External helper text is merged with ForeFill's helper when visible.
+        </p>
+      </div>
+    ),
+    code: (value) => `<ForeFill as="input" ariaDescribedBy="${value}" showHelper="idle" />`,
+  },
 };
 
 function DemoReadout({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-[#D7DEE9] bg-[#F7F8FB] px-3 py-2 text-xs dark:border-white/10 dark:bg-white/5">
+    <div className="flex items-center gap-2 rounded-md border border-[#D7DEE9] bg-[#F7F8FB] px-3 py-2 text-xs dark:border-white/10 dark:bg-white/5">
       <span className="shrink-0 font-mono font-bold text-[#6F84B2] dark:text-[#A2B2D2]">{label}</span>
       <span className="truncate font-medium text-[#33415C] dark:text-[#CAD3E3]">{value}</span>
     </div>
@@ -1379,8 +1913,25 @@ function ControlledValueDemo() {
 }
 
 function AsyncDemo({ debounceMs = 250 }: { debounceMs?: number }) {
-  const fetchSuggestions = useCallback(async (query: string) => {
-    await new Promise((resolve) => window.setTimeout(resolve, 350));
+  const fetchSuggestions = useCallback(async (
+    query: string,
+    { signal }: { signal?: AbortSignal } = {}
+  ) => {
+    await new Promise<void>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      const timer = window.setTimeout(resolve, 350);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          window.clearTimeout(timer);
+          reject(new DOMException('Aborted', 'AbortError'));
+        },
+        { once: true }
+      );
+    });
     return DEFAULT_SUGGESTIONS.filter((item) =>
       item.toLowerCase().includes(query.toLowerCase())
     );
@@ -1454,7 +2005,7 @@ function ExampleCard({
 }) {
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   return (
-    <div className="overflow-hidden rounded-xl border border-[#D7DEE9] bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
+    <div className="overflow-hidden rounded-md border border-[#D7DEE9] bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
       <div
         role="tablist"
         aria-label="Example view"
@@ -1478,7 +2029,7 @@ function ExampleCard({
         ))}
         {tab === 'preview' && (
           <span className="ml-auto pr-1 text-[10px] font-bold uppercase tracking-wider text-[#9AA7BC] dark:text-[#7C8AA3]">
-            Type to try ⌨
+            Live example
           </span>
         )}
       </div>
@@ -1499,7 +2050,7 @@ function PropControlBar({
   onChange: (value: DemoValue) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-[#C9D3E1] bg-[#F8FAFD] px-3 py-2 dark:border-white/15 dark:bg-white/[0.03]">
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-[#C9D3E1] bg-[#F8FAFD] px-3 py-2 dark:border-white/15 dark:bg-white/[0.03]">
       <span className="font-mono text-xs font-bold text-[#6F84B2] dark:text-[#A2B2D2]">{name}</span>
       <span className="text-sm text-[#9AA7BC]">=</span>
       <div className="min-w-[7rem] flex-1">
@@ -1594,8 +2145,14 @@ function DocNavGroup({ title, href, children }: { title: string; href?: string; 
 
 function DocSidebar() {
   return (
-    <aside className="hidden w-60 shrink-0 lg:block">
-      <nav className="sticky top-24 max-h-[calc(100vh-7rem)] space-y-5 overflow-y-auto border-l border-[#D7DEE9] pb-8 pl-4 pr-1 dark:border-white/10">
+    <aside className="hidden w-64 shrink-0 self-start lg:sticky lg:top-24 lg:block lg:max-h-[calc(100vh-7rem)]">
+      <nav
+        aria-label="Documentation navigation"
+        className="max-h-[calc(100vh-7rem)] space-y-5 overflow-y-auto rounded-md border border-[#D7DEE9] bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5"
+      >
+        <p className="text-xs font-black uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
+          On this page
+        </p>
         <DocNavGroup title="Guides">
           {GUIDE_SECTIONS.map((section) => (
             <DocNavLink key={section.id} href={`#${section.id}`}>
@@ -1617,30 +2174,113 @@ function DocSidebar() {
   );
 }
 
+function DocMobileNav() {
+  return (
+    <div className="sticky top-16 z-30 -mx-4 mb-8 border-y border-[#D7DEE9] bg-[#F7F8FB]/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:hidden dark:border-white/10 dark:bg-[#10131A]/95">
+      <nav
+        aria-label="Mobile documentation navigation"
+        className="flex gap-2 overflow-x-auto pb-2 [scrollbar-width:none]"
+      >
+        {GUIDE_SECTIONS.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            className="shrink-0 rounded-md border border-[#D7DEE9] bg-white px-3 py-1.5 text-xs font-bold text-[#526078] shadow-sm transition hover:border-[#A2B2D2] hover:text-[#07154D] dark:border-white/10 dark:bg-white/5 dark:text-[#A8B3C7] dark:hover:text-white"
+          >
+            {section.label}
+          </a>
+        ))}
+        {DOC_CATEGORIES.map((category) => (
+          <a
+            key={category.id}
+            href={`#${category.id}`}
+            className="shrink-0 rounded-md border border-[#D7DEE9] bg-white px-3 py-1.5 text-xs font-bold text-[#526078] shadow-sm transition hover:border-[#A2B2D2] hover:text-[#07154D] dark:border-white/10 dark:bg-white/5 dark:text-[#A8B3C7] dark:hover:text-white"
+          >
+            {category.label}
+          </a>
+        ))}
+      </nav>
+
+      <label
+        htmlFor="doc-prop-jump"
+        className="mt-2 block text-[10px] font-black uppercase tracking-wider text-[#708096] dark:text-[#A8B3C7]"
+      >
+        Jump to API prop
+      </label>
+      <select
+        id="doc-prop-jump"
+        defaultValue=""
+        onChange={(event) => {
+          const next = event.currentTarget.value;
+          if (!next) return;
+          window.location.hash = next;
+          event.currentTarget.value = '';
+        }}
+        className="mt-1 w-full rounded-md border border-[#C9D3E1] bg-white px-3 py-2 text-sm font-semibold text-[#07154D] outline-none transition focus:border-[#6F84B2] focus:ring-2 focus:ring-[#6F84B2]/20 dark:border-white/15 dark:bg-[#151923] dark:text-white"
+      >
+        <option value="" disabled>
+          Select a prop
+        </option>
+        {API_PROPS.map((prop) => (
+          <option key={prop.name} value={prop.name}>
+            {prop.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function DocumentationPage({ theme }: { theme: ThemeMode }) {
   return (
     <main
       id="documentation"
       data-theme={theme}
-      className="mx-auto flex w-full max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:px-8"
+      className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8"
     >
-      <DocSidebar />
+      <DocMobileNav />
 
-      <div className="min-w-0 flex-1 space-y-14">
-        <header className="space-y-2">
-          <p className="text-sm font-black uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
-            Documentation
-          </p>
-          <h1 className="text-3xl font-black tracking-tight text-[#07154D] dark:text-white sm:text-4xl">
-            Every prop, with a field you can type in
-          </h1>
-          <p className="max-w-2xl leading-7 text-[#526078] dark:text-[#A8B3C7]">
-            Each example below is live. Type into it to feel the behavior, then flip to the
-            Code tab to copy the exact snippet.
-          </p>
-        </header>
+      <div className="flex items-start gap-8">
+        <DocSidebar />
+
+        <div className="min-w-0 flex-1 space-y-14">
+          <header className="border-b border-[#D7DEE9] pb-8 dark:border-white/10">
+            <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+              <div>
+                <p className="text-sm font-black uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
+                  Documentation
+                </p>
+                <h1 className="mt-2 max-w-3xl text-3xl font-black tracking-tight text-[#07154D] dark:text-white sm:text-4xl">
+                  Build production-ready inline autocomplete
+                </h1>
+                <p className="mt-4 max-w-3xl leading-7 text-[#526078] dark:text-[#A8B3C7]">
+                  Start with a static list, add trigger completions or async data, then tune
+                  behavior, styling, accessibility, and native form integration from the live
+                  API reference.
+                </p>
+              </div>
+              <a href="#quick-start" className="inline-flex w-fit items-center gap-2 rounded-md border border-[#C9D3E1] bg-white px-4 py-2.5 text-sm font-bold text-[#07154D] transition hover:bg-[#EEF2F7] dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10">
+                <Sparkles className="h-4 w-4" />
+                Quick start
+              </a>
+            </div>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              {DOC_OVERVIEW.map((item, index) => (
+                <div key={item.title} className="rounded-md border border-[#D7DEE9] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+                  <span className="font-mono text-xs font-black text-[#6F84B2] dark:text-[#A2B2D2]">
+                    0{index + 1}
+                  </span>
+                  <h2 className="mt-2 font-black text-[#07154D] dark:text-white">{item.title}</h2>
+                  <p className="mt-1 text-sm leading-6 text-[#526078] dark:text-[#A8B3C7]">
+                    {item.text}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </header>
         <DocSection id="installation" title="Installation" icon={<Clipboard className="h-5 w-5" />}>
-          <p>Install the package and import its stylesheet once in your app.</p>
+          <p>Install the package and import the stylesheet once near your application root.</p>
           <CodeBlock code={`npm install ${PKG}`} filename="terminal" />
           <CodeBlock
             filename="App.tsx"
@@ -1651,8 +2291,8 @@ import '${PKG}/styles.css';`}
 
         <DocSection id="quick-start" title="Quick start" icon={<Sparkles className="h-5 w-5" />}>
           <p>
-            Pass a list of phrases and handle the committed value. Type a few letters below,
-            then accept the hint with Tab or Enter.
+            Pass a suggestion list, render the field, and handle the committed value.
+            The same pattern works for controlled or uncontrolled form state.
           </p>
           <ExampleCard
             filename="ReplyBox.tsx"
@@ -1675,8 +2315,8 @@ import '${PKG}/styles.css';`}
 
         <DocSection id="trigger-suggestions" title="Trigger suggestions" icon={<WandSparkles className="h-5 w-5" />}>
           <p>
-            Configure any symbol or word as a trigger. Trigger suggestions use startsWith
-            matching, keep the trigger text, and replace only the typed query after it.
+            Configure symbols or words as completion triggers. Trigger suggestions keep the
+            trigger text in place and replace only the query typed after it.
           </p>
           <ExampleCard
             filename="Triggers.tsx"
@@ -1700,9 +2340,8 @@ import '${PKG}/styles.css';`}
 
         <DocSection id="existing-values" title="Existing values" icon={<Zap className="h-5 w-5" />}>
           <p>
-            When a field starts with text, ForeFill treats newly appended text as the active
-            query. Accepting a normal suggestion replaces that active segment and preserves
-            the existing prefix.
+            When a field already contains text, ForeFill treats newly appended text as the
+            active query. Accepting a suggestion preserves the saved prefix.
           </p>
           <ExampleCard
             filename="ExistingValue.tsx"
@@ -1722,15 +2361,18 @@ import '${PKG}/styles.css';`}
 
         <DocSection id="async-suggestions" title="Async suggestions" icon={<Code2 className="h-5 w-5" />}>
           <p>
-            Async fetchers receive the active query, including appended text after an existing
-            value. Use debounceMs to limit requests; a progress bar shows while loading.
+            Async fetchers receive the active query and can be debounced to limit network
+            traffic. Loading state is reflected visually and through ARIA.
           </p>
           <ExampleCard
             filename="Async.tsx"
             code={`<ForeFill
   debounceMs={250}
-  asyncSuggestions={async (query) => {
-    const res = await fetch('/api/suggestions?q=' + encodeURIComponent(query));
+  asyncSuggestions={async (query, { signal }) => {
+    const res = await fetch(
+      '/api/suggestions?q=' + encodeURIComponent(query),
+      { signal }
+    );
     return res.json();
   }}
 />`}
@@ -1740,24 +2382,31 @@ import '${PKG}/styles.css';`}
         </DocSection>
 
         <DocSection id="surfaces" title="Surfaces" icon={<SlidersHorizontal className="h-5 w-5" />}>
-          <p>The same completion behavior works in textarea, input, and richtext surfaces.</p>
+          <p>Use the same completion behavior across textarea, input, and contenteditable surfaces.</p>
           <ExampleCard
             code={`<ForeFill as="textarea" suggestions={data} />
 <ForeFill as="input" suggestions={data} />
-<ForeFill as="richtext" suggestions={data} />`}
+<ForeFill as="contenteditable" suggestions={data} />`}
           >
             <div className="space-y-3">
               <ForeFill as="textarea" rows={2} suggestions={DEFAULT_SUGGESTIONS} placeholder="textarea — type 'Thanks'" showHelper={false} />
               <ForeFill as="input" suggestions={DEFAULT_SUGGESTIONS} placeholder="input — type 'Thanks'" showHelper={false} />
-              <ForeFill as="richtext" suggestions={DEFAULT_SUGGESTIONS} placeholder="richtext — type 'Thanks'" showHelper={false} />
+              <ForeFill
+                as="contenteditable"
+                suggestions={DEFAULT_SUGGESTIONS}
+                placeholder="contenteditable - type 'Thanks'"
+                showHelper={false}
+                className="ff-contenteditable-demo"
+                editorClassName="ff-contenteditable-demo__editor"
+              />
             </div>
           </ExampleCard>
         </DocSection>
 
         <DocSection id="styling" title="Styling" icon={<Sun className="h-5 w-5" />}>
           <p>
-            Pick a variant and size, or override CSS variables through className. The library
-            stylesheet is plain CSS.
+            Use the built-in variants and sizes, or override CSS custom properties through
+            className. The shipped stylesheet is plain CSS.
           </p>
           <ExampleCard
             code={`/* Override design tokens on the root via className */
@@ -1784,9 +2433,9 @@ import '${PKG}/styles.css';`}
           <ul className="grid gap-3 sm:grid-cols-2">
             {[
               'aria-autocomplete is inline.',
-              'Loading and active hints are announced politely.',
-              'Escape dismisses visible hints.',
-              'Read-only and error states are reflected with ARIA.',
+              'Loading and active suggestions are announced politely.',
+              'Escape dismisses visible suggestions.',
+              'Read-only, required, busy, and error states are reflected with ARIA.',
             ].map((item) => (
               <li key={item} className="rounded-md border border-[#D7DEE9] bg-white p-3 text-sm dark:border-white/10 dark:bg-white/5">
                 {item}
@@ -1803,13 +2452,15 @@ import '${PKG}/styles.css';`}
             All {API_PROPS.length} props, grouped and live
           </h2>
           <p className="mt-2 max-w-2xl text-[#526078] dark:text-[#A8B3C7]">
-            Every prop below has its own typeable example. Use the sidebar to jump straight to one.
+            Each prop includes its type, default, usage notes, and a focused example you can
+            preview or copy.
           </p>
         </div>
 
         {DOC_CATEGORIES.map((category) => (
           <PropCategory key={category.id} category={category} />
         ))}
+        </div>
       </div>
     </main>
   );
@@ -1825,46 +2476,38 @@ function PlaygroundPage({ theme }: { theme: ThemeMode }) {
 
 function Playground({ theme }: { theme: ThemeMode }) {
   const [committed, setCommitted] = useState('');
-  const [lastEvent, setLastEvent] = useState<string | null>(null);
+  const [eventLog, setEventLog] = useState<PlaygroundEvent[]>([]);
   const [suggestions, setSuggestions] = useState(DEFAULT_SUGGESTIONS);
   const [openHelp, setOpenHelp] = useState<string | null>(null);
-  const [s, setS] = useState<PlaygroundState>({
-    as: 'textarea',
-    placeholder: 'Write a reply...',
-    rows: 3,
-    inputType: 'text',
-    ariaLabel: 'Compose a reply',
-    variant: 'outline',
-    size: 'md',
-    themeChoice: 'auto',
-    matchMode: 'substring',
-    minQueryLength: 1,
-    debounceMs: 0,
-    asyncMode: false,
-    triggerMode: 'all',
-    disableInlineFill: false,
-    enableArrowNavigation: true,
-    acceptOnEnter: true,
-    commitOnBlur: false,
-    partialAccept: true,
-    showHelper: 'idle',
-    helperIdleMs: 900,
-    helperText: '',
-    status: 'idle',
-    name: '',
-    id: '',
-    required: false,
-    readOnly: false,
-    maxLength: 0,
-    autoFocus: false,
-    disabled: false,
-  });
+  const [s, setS] = useState<PlaygroundState>(PLAYGROUND_DEFAULT_STATE);
+  const eventIdRef = useRef(0);
 
   const set = useCallback(
     <K extends keyof PlaygroundState>(key: K, value: PlaygroundState[K]) =>
       setS((prev) => ({ ...prev, [key]: value })),
     []
   );
+
+  const recordEvent = useCallback((name: string, value = '') => {
+    eventIdRef.current += 1;
+    setEventLog((prev) =>
+      [
+        {
+          id: eventIdRef.current,
+          name,
+          value: value || 'empty',
+        },
+        ...prev,
+      ].slice(0, 6)
+    );
+  }, []);
+
+  const applyPreset = useCallback((preset: PlaygroundPreset) => {
+    setS({ ...PLAYGROUND_DEFAULT_STATE, ...preset.state });
+    setSuggestions(preset.suggestions ?? DEFAULT_SUGGESTIONS);
+    setCommitted('');
+    setEventLog([]);
+  }, []);
 
   const triggerSuggestions = useMemo(
     () => getTriggersForMode(s.triggerMode),
@@ -1874,8 +2517,25 @@ function Playground({ theme }: { theme: ThemeMode }) {
   const asyncFetcher = useMemo(
     () =>
       s.asyncMode
-        ? async (query: string) => {
-            await new Promise((resolve) => window.setTimeout(resolve, 350));
+        ? async (
+            query: string,
+            { signal }: { signal?: AbortSignal } = {}
+          ) => {
+            await new Promise<void>((resolve, reject) => {
+              if (signal?.aborted) {
+                reject(new DOMException('Aborted', 'AbortError'));
+                return;
+              }
+              const timer = window.setTimeout(resolve, 350);
+              signal?.addEventListener(
+                'abort',
+                () => {
+                  window.clearTimeout(timer);
+                  reject(new DOMException('Aborted', 'AbortError'));
+                },
+                { once: true }
+              );
+            });
             return DEFAULT_SUGGESTIONS.filter((item) =>
               item.toLowerCase().includes(query.toLowerCase())
             );
@@ -1885,8 +2545,8 @@ function Playground({ theme }: { theme: ThemeMode }) {
   );
 
   const generatedCode = useMemo(
-    () => buildForeFillCode(s, triggerSuggestions),
-    [s, triggerSuggestions]
+    () => buildForeFillCode(s, suggestions, triggerSuggestions),
+    [s, suggestions, triggerSuggestions]
   );
 
   return (
@@ -1899,6 +2559,26 @@ function Playground({ theme }: { theme: ThemeMode }) {
           Configure every ForeFill API
         </h1>
       </div>
+
+      <Panel title="Use-case presets">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {PLAYGROUND_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => applyPreset(preset)}
+              className="min-h-[6.25rem] rounded-md border border-[#D7DEE9] bg-[#F8FAFD] p-3 text-left transition hover:border-[#6F84B2] hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6F84B2] dark:border-white/10 dark:bg-white/5 dark:hover:border-[#A2B2D2] dark:hover:bg-white/10"
+            >
+              <span className="block text-sm font-black text-[#07154D] dark:text-white">
+                {preset.label}
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-[#526078] dark:text-[#A8B3C7]">
+                {preset.description}
+              </span>
+            </button>
+          ))}
+        </div>
+      </Panel>
 
       <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
         <Panel title="Preview">
@@ -1939,18 +2619,21 @@ function Playground({ theme }: { theme: ThemeMode }) {
             autoFocus={s.autoFocus}
             disabled={s.disabled}
             theme={s.themeChoice === 'auto' ? theme : s.themeChoice}
+            className={s.as === 'contenteditable' ? 'ff-contenteditable-demo' : undefined}
+            editorClassName={s.as === 'contenteditable' ? 'ff-contenteditable-demo__editor' : undefined}
+            onChange={(value) => recordEvent('onChange', value)}
             onCommit={(value) => {
               setCommitted(value);
-              setLastEvent('committed');
+              recordEvent('onCommit', value);
             }}
             onAccept={(_value, suggestion) =>
-              setLastEvent(`accepted "${suggestion}"`)
+              recordEvent('onAccept', suggestion)
             }
-            onDismiss={() => setLastEvent('dismissed')}
+            onDismiss={() => recordEvent('onDismiss')}
           />
           <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <StatusBox label="Last event" value={lastEvent ?? 'none'} />
             <StatusBox label="Committed value" value={committed || 'none'} />
+            <EventLog events={eventLog} />
           </div>
         </Panel>
 
@@ -1963,7 +2646,7 @@ function Playground({ theme }: { theme: ThemeMode }) {
         <div className="space-y-7">
           <ControlGroup title="Surface">
             <Control name="as" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.as} onChange={(value) => set('as', value as ForeFillSurface)} options={['textarea', 'input', 'richtext']} />
+              <Select value={s.as} onChange={(value) => set('as', value as ForeFillSurface)} options={['textarea', 'input', 'contenteditable']} />
             </Control>
             <Control name="rows" openHelp={openHelp} setOpenHelp={setOpenHelp}>
               <NumberInput value={s.rows} min={1} max={12} onChange={(value) => set('rows', Math.max(1, value))} />
@@ -2112,13 +2795,16 @@ function getTriggersForMode(mode: TriggerMode): ForeFillTriggerSuggestion[] | un
 
 function buildForeFillCode(
   s: PlaygroundState,
+  suggestions: string[],
   triggerSuggestions: ForeFillTriggerSuggestion[] | undefined
 ): string {
-  const lines: string[] = ['  suggestions={suggestions}'];
-  const str = (name: string, value: string) => lines.push(`  ${name}="${value}"`);
-  const raw = (name: string, value: string) => lines.push(`  ${name}={${value}}`);
-  const flag = (name: string) => lines.push(`  ${name}`);
+  const lines: string[] = [];
+  const str = (name: string, value: string) => lines.push(`      ${name}=${JSON.stringify(value)}`);
+  const raw = (name: string, value: string) => lines.push(`      ${name}={${value}}`);
+  const flag = (name: string) => lines.push(`      ${name}`);
+  const includeSuggestions = !s.asyncMode && suggestions.length > 0;
 
+  if (includeSuggestions) raw('suggestions', 'suggestions');
   if (triggerSuggestions) raw('triggerSuggestions', 'triggerSuggestions');
   if (s.asyncMode) raw('asyncSuggestions', 'fetchSuggestions');
   if (s.as !== 'textarea') str('as', s.as);
@@ -2149,13 +2835,46 @@ function buildForeFillCode(
   if (s.maxLength > 0) raw('maxLength', String(s.maxLength));
   if (s.autoFocus) flag('autoFocus');
   if (s.disabled) flag('disabled');
-  lines.push('  onCommit={(value) => setValue(value)}');
+  raw('value', 'value');
+  raw('onChange', 'setValue');
+  raw('onCommit', "(nextValue) => console.log('committed', nextValue)");
+
+  const suggestionBlock = includeSuggestions
+    ? `const suggestions = ${JSON.stringify(suggestions, null, 2)};\n\n`
+    : '';
 
   const triggerBlock = triggerSuggestions
     ? `const triggerSuggestions = ${JSON.stringify(triggerSuggestions, null, 2)};\n\n`
     : '';
 
-  return `${triggerBlock}<ForeFill\n${lines.join('\n')}\n/>`;
+  const asyncBlock = s.asyncMode
+    ? `const fetchSuggestions = async (
+  query: string,
+  { signal }: { signal?: AbortSignal } = {}
+) => {
+  const response = await fetch(
+    \`/api/suggestions?q=\${encodeURIComponent(query)}\`,
+    { signal }
+  );
+  return response.json() as Promise<string[]>;
+};
+
+`
+    : '';
+
+  return `import { useState } from 'react';
+import { ForeFill } from 'forefill';
+import 'forefill/styles.css';
+
+${suggestionBlock}${triggerBlock}${asyncBlock}export default function App() {
+  const [value, setValue] = useState('');
+
+  return (
+    <ForeFill
+${lines.join('\n')}
+    />
+  );
+}`;
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
@@ -2166,29 +2885,6 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
       </h2>
       {children}
     </section>
-  );
-}
-
-function DemoPanel({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="rounded-md border border-[#D7DEE9] bg-[#F7F8FB] p-5 shadow-sm dark:border-white/10 dark:bg-[#10131A]">
-      <h2 className="mb-3 text-sm font-black uppercase tracking-wider text-[#526078] dark:text-[#A8B3C7]">
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Feature({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
-  return (
-    <div className="rounded-md border border-[#D7DEE9] bg-white p-4 dark:border-white/10 dark:bg-white/5">
-      <div className="mb-3 grid h-9 w-9 place-items-center rounded-md bg-[#EEF2F8] text-[#6F84B2] dark:bg-[#6F84B2]/20 dark:text-[#A2B2D2]">
-        {icon}
-      </div>
-      <h2 className="font-black text-[#07154D] dark:text-white">{title}</h2>
-      <p className="mt-1 text-sm leading-6 text-[#526078] dark:text-[#A8B3C7]">{text}</p>
-    </div>
   );
 }
 
@@ -2442,6 +3138,32 @@ function StatusBox({ label, value }: { label: string; value: string }) {
         {label}
       </span>
       <p className="mt-1 break-words text-sm font-semibold text-[#07154D] dark:text-white">{value}</p>
+    </div>
+  );
+}
+
+function EventLog({ events }: { events: PlaygroundEvent[] }) {
+  return (
+    <div className="rounded-md border border-[#D7DEE9] bg-[#F7F8FB] p-3 dark:border-white/10 dark:bg-white/5">
+      <span className="text-[10px] font-black uppercase tracking-wider text-[#708096] dark:text-[#A8B3C7]">
+        Event log
+      </span>
+      <div className="mt-2 space-y-1.5">
+        {events.length === 0 ? (
+          <p className="text-sm font-semibold text-[#07154D] dark:text-white">none</p>
+        ) : (
+          events.map((event) => (
+            <div key={event.id} className="grid grid-cols-[5.75rem_1fr] gap-2 text-xs">
+              <span className="font-mono font-bold text-[#6F84B2] dark:text-[#A2B2D2]">
+                {event.name}
+              </span>
+              <span className="truncate text-[#33415C] dark:text-[#CAD3E3]" title={event.value}>
+                {event.value}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

@@ -101,3 +101,83 @@ html {
     mask-image: none;
   }
 }
+
+@keyframes ff-arrow-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(8px);
+    opacity: 1;
+  }
+}
+
+.ff-arrow-bounce {
+  animation: ff-arrow-bounce 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-arrow-bounce {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* Documentation/playground-only treatment for the contenteditable surface. */
+.ff-contenteditable-demo {
+  --ff-min-height: 9.5rem;
+  --ff-padding-x: 1.15rem;
+  --ff-line-height: 1.65;
+}
+
+.ff-contenteditable-demo .ff-field {
+  background:
+    linear-gradient(#eef2f7 1px, transparent 1px) 0 3rem / 100% 1.65em,
+    #ffffff;
+  border-color: #cfd8e7;
+  box-shadow: 0 14px 36px -26px rgba(15, 23, 42, 0.55);
+}
+
+.ff-contenteditable-demo .ff-field::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2.25rem;
+  pointer-events: none;
+  border-bottom: 1px solid #dbe3ef;
+  background:
+    radial-gradient(circle at 1.1rem 50%, #8da2c0 0 0.18rem, transparent 0.2rem),
+    radial-gradient(circle at 1.75rem 50%, #8da2c0 0 0.18rem, transparent 0.2rem),
+    radial-gradient(circle at 2.4rem 50%, #8da2c0 0 0.18rem, transparent 0.2rem),
+    linear-gradient(90deg, #f8fafc, #eef4fb);
+  z-index: 2;
+}
+
+.ff-contenteditable-demo .ff-ghost {
+  inset: 3rem var(--ff-padding-x) 1rem var(--ff-padding-x);
+}
+
+.ff-contenteditable-demo__editor {
+  min-height: 9.5rem;
+  padding-top: 3rem;
+  padding-bottom: 1rem;
+}
+
+.dark .ff-contenteditable-demo .ff-field {
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.18) 1px, transparent 1px) 0 3rem / 100% 1.65em,
+    #101827;
+  border-color: rgba(148, 163, 184, 0.36);
+  box-shadow: 0 18px 42px -30px rgba(0, 0, 0, 0.9);
+}
+
+.dark .ff-contenteditable-demo .ff-field::after {
+  border-bottom-color: rgba(148, 163, 184, 0.28);
+  background:
+    radial-gradient(circle at 1.1rem 50%, #94a3b8 0 0.18rem, transparent 0.2rem),
+    radial-gradient(circle at 1.75rem 50%, #94a3b8 0 0.18rem, transparent 0.2rem),
+    radial-gradient(circle at 2.4rem 50%, #94a3b8 0 0.18rem, transparent 0.2rem),
+    linear-gradient(90deg, #172033, #111827);
+}

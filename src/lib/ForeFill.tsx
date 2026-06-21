@@ -16,7 +16,11 @@ import {
   type Ref,
 } from 'react';
 import { cx } from './utils/cx';
-import { useSuggestions, type MatchMode } from './hooks/useSuggestions';
+import {
+  useSuggestions,
+  type AsyncSuggestionFetcher,
+  type MatchMode,
+} from './hooks/useSuggestions';
 
 export type ForeFillVariant = 'outline' | 'filled' | 'underline';
 export type ForeFillSize = 'sm' | 'md' | 'lg';
@@ -29,7 +33,7 @@ export type ForeFillSize = 'sm' | 'md' | 'lg';
  */
 export type ForeFillMatchMode = Exclude<MatchMode, 'fuzzy'>;
 export type HelperVisibility = boolean | 'idle';
-export type ForeFillSurface = 'textarea' | 'input' | 'richtext';
+export type ForeFillSurface = 'textarea' | 'input' | 'contenteditable';
 
 export interface ForeFillTriggerSuggestion {
   /** Text that activates this suggestion group, such as '@', '$', or 'Happy'. */
@@ -45,8 +49,8 @@ export interface ForeFillTriggerSuggestion {
 export interface ForeFillProps {
   /**
    * Editable surface to render.
-   * `textarea` is multiline, `input` is single-line, and `richtext` renders a
-   * contenteditable plain-text surface.
+   * `textarea` is multiline, `input` is single-line, and `contenteditable`
+   * renders a plain-text contenteditable surface.
    */
   as?: ForeFillSurface;
   /** Static suggestion list. Ignored if `asyncSuggestions` is provided. */
@@ -58,7 +62,7 @@ export interface ForeFillProps {
    */
   triggerSuggestions?: ForeFillTriggerSuggestion[];
   /** Async source of suggestions. Takes precedence over `suggestions`. */
-  asyncSuggestions?: (query: string) => Promise<string[]>;
+  asyncSuggestions?: AsyncSuggestionFetcher;
   /** Fires when a value is finalized with Enter or Tab. */
   onCommit?: (value: string) => void;
   /** Fires on every keystroke. */
@@ -105,6 +109,10 @@ export interface ForeFillProps {
   debounceMs?: number;
   /** aria-label. Defaults to `placeholder`. */
   ariaLabel?: string;
+  /** ID of an external label element. Takes precedence over `ariaLabel`. */
+  ariaLabelledBy?: string;
+  /** ID of external helper/error text to merge into `aria-describedby`. */
+  ariaDescribedBy?: string;
   /**
    * Show the inline keyboard helper next to the ghost hint.
    * `true` shows it immediately, `false` hides it, and `'idle'` shows it
@@ -432,6 +440,13 @@ function selectEditableText(node: EditableElement) {
   selection.addRange(range);
 }
 
+function joinIds(
+  ...ids: Array<string | false | null | undefined>
+): string | undefined {
+  const value = ids.filter(Boolean).join(' ');
+  return value || undefined;
+}
+
 /**
  * Whether the caret sits collapsed at the very end of the editable content.
  * The inline ghost is only meaningful when the user is appending — typing in
@@ -491,6 +506,8 @@ export const ForeFill = forwardRef(function ForeFill(
     minQueryLength = DEFAULTS.minQueryLength,
     debounceMs = DEFAULTS.debounceMs,
     ariaLabel,
+    ariaLabelledBy,
+    ariaDescribedBy,
     showHelper = false,
     helperIdleMs = DEFAULTS.helperIdleMs,
     helperText,
@@ -543,10 +560,11 @@ export const ForeFill = forwardRef(function ForeFill(
       findActiveTrigger(currentValue, activeSegmentStart, triggerSuggestions),
     [activeSegmentStart, currentValue, triggerSuggestions]
   );
+  const normalAsyncSuggestions = activeTrigger ? undefined : asyncSuggestions;
 
   const { matches, isLoading } = useSuggestions(completionContext.query, {
     suggestions,
-    asyncFetcher: asyncSuggestions,
+    asyncFetcher: normalAsyncSuggestions,
     minQueryLength,
     debounceMs,
     matchMode,
@@ -589,11 +607,11 @@ export const ForeFill = forwardRef(function ForeFill(
 
       const node = editorRef.current;
       if (node) {
-        // `richtext` is an uncontrolled contenteditable, so its DOM must be
+        // `contenteditable` is uncontrolled, so its DOM must be
         // written directly. For input/textarea we only touch the DOM in the
         // uncontrolled case — writing to a controlled element's `.value`
         // fights React's own render and is reverted on the next commit.
-        if (surface === 'richtext' || !isControlled) {
+        if (surface === 'contenteditable' || !isControlled) {
           setEditableText(node, finalValue);
         }
         moveCaretToEnd(node);
@@ -645,7 +663,7 @@ export const ForeFill = forwardRef(function ForeFill(
     handleEditorChange(e.target.value);
   };
 
-  const handleRichTextInput = (e: FormEvent<HTMLDivElement>) => {
+  const handleContentEditableInput = (e: FormEvent<HTMLDivElement>) => {
     handleEditorChange(getEditableText(e.currentTarget));
   };
 
@@ -729,7 +747,7 @@ export const ForeFill = forwardRef(function ForeFill(
   };
 
   useEffect(() => {
-    if (surface !== 'richtext') return;
+    if (surface !== 'contenteditable') return;
 
     const node = editorRef.current;
     if (!node || getEditableText(node) === currentValue) return;
@@ -737,6 +755,17 @@ export const ForeFill = forwardRef(function ForeFill(
     setEditableText(node, currentValue);
     if (isFocused) moveCaretToEnd(node);
   }, [currentValue, isFocused, surface]);
+
+  useBrowserLayoutEffect(() => {
+    if (surface !== 'contenteditable' || !autoFocus || disabled) return;
+    const node = editorRef.current;
+    if (!node) return;
+
+    node.focus();
+    moveCaretToEnd(node);
+    setIsFocused(true);
+    setCaretAtEnd(true);
+  }, [autoFocus, disabled, surface]);
 
   // After a programmatic value growth (word-by-word accept) React re-renders the
   // longer value but may keep the caret at its old offset (now mid-string).
@@ -754,7 +783,7 @@ export const ForeFill = forwardRef(function ForeFill(
   // contenteditable doesn't emit `onSelect`, so caret moves (click, arrows)
   // are observed via the document-level `selectionchange` event while focused.
   useEffect(() => {
-    if (surface !== 'richtext' || !isFocused) return;
+    if (surface !== 'contenteditable' || !isFocused) return;
     if (typeof document === 'undefined') return;
 
     document.addEventListener('selectionchange', syncCaret);
@@ -769,12 +798,18 @@ export const ForeFill = forwardRef(function ForeFill(
       isDeletingRef.current ||
       !caretAtEnd ||
       dismissedValueRef.current === currentValue ||
-      (asyncSuggestions && isLoading && !activeTrigger)
+      (normalAsyncSuggestions && isLoading)
     ) {
       setGhostCompletion(null);
       setInlineMatches([]);
       return;
     }
+
+    const nativeMaxLength =
+      (surface === 'input' || surface === 'textarea') &&
+      typeof maxLength === 'number'
+        ? maxLength
+        : undefined;
 
     const nextInlineMatches = activeTrigger
       ? buildTriggerCompletions(currentValue, activeTrigger)
@@ -786,24 +821,30 @@ export const ForeFill = forwardRef(function ForeFill(
             )
             .filter((match): match is InlineCompletion => match !== null);
 
-    setInlineMatches(nextInlineMatches);
+    const nextAvailableMatches =
+      nativeMaxLength === undefined
+        ? nextInlineMatches
+        : nextInlineMatches.filter(
+            (match) => match.finalValue.length <= nativeMaxLength
+          );
 
-    if (nextInlineMatches.length === 0) {
+    setInlineMatches(nextAvailableMatches);
+
+    if (nextAvailableMatches.length === 0) {
       setGhostCompletion(null);
       return;
     }
 
     const safeIndex =
-      activeMatchIndex >= nextInlineMatches.length ? 0 : activeMatchIndex;
+      activeMatchIndex >= nextAvailableMatches.length ? 0 : activeMatchIndex;
     if (safeIndex !== activeMatchIndex) {
       setActiveMatchIndex(safeIndex);
     }
 
-    setGhostCompletion(nextInlineMatches[safeIndex]);
+    setGhostCompletion(nextAvailableMatches[safeIndex]);
   }, [
     activeMatchIndex,
     activeTrigger,
-    asyncSuggestions,
     caretAtEnd,
     completionContext,
     currentValue,
@@ -811,8 +852,11 @@ export const ForeFill = forwardRef(function ForeFill(
     isFocused,
     isLoading,
     matches,
+    maxLength,
     minQueryLength,
+    normalAsyncSuggestions,
     readOnly,
+    surface,
   ]);
 
   const ghostTextParts = ghostCompletion?.parts ?? null;
@@ -849,7 +893,7 @@ export const ForeFill = forwardRef(function ForeFill(
   // Aligns the typed text over the ghost by measuring the rendered width of the
   // ghost prefix and shifting the editor's left padding by that amount. This is
   // exact for prefixes that stay on a single visual line. For a `substring`
-  // match whose prefix wraps across lines in a multiline textarea/richtext, the
+  // match whose prefix wraps across lines in a multiline textarea/contenteditable, the
   // single-span measurement can't model the wrap, so alignment is approximate —
   // `startsWith` (empty prefix) is always pixel-exact.
   useBrowserLayoutEffect(() => {
@@ -878,9 +922,12 @@ export const ForeFill = forwardRef(function ForeFill(
       ? { paddingLeft: `calc(var(--ff-padding-x) + ${ghostPrefixOffset}px)` }
       : undefined;
 
+  const acceptHintText = acceptOnEnter
+    ? 'Tab or Enter accepts the hint.'
+    : 'Tab accepts the hint. Enter commits typed text.';
   const defaultHelperText = canCycleSuggestions
-    ? 'Arrow up or arrow down changes the hint. Tab or Enter accepts it. Esc hides it.'
-    : 'Tab or Enter accepts the hint. Esc hides it.';
+    ? `Arrow up or arrow down changes the hint. ${acceptHintText} Esc hides it.`
+    : `${acceptHintText} Esc hides it.`;
 
   const defaultHelper = (
     <>
@@ -893,9 +940,19 @@ export const ForeFill = forwardRef(function ForeFill(
         </>
       )}
       <kbd className="ff-key">Tab</kbd>
-      <span>or</span>
-      <kbd className="ff-key">Enter</kbd>
-      <span>accepts the hint.</span>
+      {acceptOnEnter ? (
+        <>
+          <span>or</span>
+          <kbd className="ff-key">Enter</kbd>
+          <span>accepts the hint.</span>
+        </>
+      ) : (
+        <>
+          <span>accepts the hint.</span>
+          <kbd className="ff-key">Enter</kbd>
+          <span>commits typed text.</span>
+        </>
+      )}
       <kbd className="ff-key">Esc</kbd>
       <span>hides it.</span>
     </>
@@ -903,7 +960,7 @@ export const ForeFill = forwardRef(function ForeFill(
   // Effective visual status. `loading` is also inferred from async fetches so
   // callers get the progress bar for free; explicit `status` always wins.
   const isLoadingState =
-    status === 'loading' || (!!asyncSuggestions && isLoading);
+    status === 'loading' || (!!normalAsyncSuggestions && isLoading);
   const resolvedState: 'idle' | 'success' | 'error' =
     status === 'error' || status === 'success'
       ? status
@@ -916,21 +973,22 @@ export const ForeFill = forwardRef(function ForeFill(
     ? 'Loading suggestions…'
     : hasGhostTextParts && ghostText
       ? canCycleSuggestions
-        ? `${inlineMatches.length} suggestions available. Current: ${ghostText}. Use Up and Down arrows to cycle, Tab or Enter to accept.`
-        : `Suggestion available: ${ghostText}. Press Tab or Enter to accept.`
+        ? `${inlineMatches.length} suggestions available. Current: ${ghostText}. Use Up and Down arrows to cycle. ${acceptHintText}`
+        : `Suggestion available: ${ghostText}. ${acceptHintText}`
       : '';
 
-  const describedBy = (showHelperText && helperId) || undefined;
+  const describedBy = joinIds(ariaDescribedBy, showHelperText && helperId);
 
   const editableClassName = cx(
     'ff-editor',
     surface === 'input' && 'ff-editor--input',
-    surface === 'richtext' && 'ff-editor--richtext',
+    surface === 'contenteditable' && 'ff-editor--contenteditable',
     editorClassName
   );
 
   const editorAriaProps = {
-    'aria-label': ariaLabel ?? placeholder,
+    'aria-label': ariaLabelledBy ? undefined : (ariaLabel ?? placeholder),
+    'aria-labelledby': ariaLabelledBy,
     'aria-autocomplete': 'inline' as const,
     'aria-describedby': describedBy,
     'aria-invalid': resolvedState === 'error' || undefined,
@@ -1037,7 +1095,7 @@ export const ForeFill = forwardRef(function ForeFill(
           />
         )}
 
-        {surface === 'richtext' && (
+        {surface === 'contenteditable' && (
           <div
             ref={(node) => {
               editorRef.current = node;
@@ -1053,7 +1111,7 @@ export const ForeFill = forwardRef(function ForeFill(
             data-empty={currentValue.length === 0}
             spellCheck={false}
             tabIndex={disabled ? -1 : 0}
-            onInput={handleRichTextInput}
+            onInput={handleContentEditableInput}
             onKeyDown={handleKeyDown}
             onSelect={syncCaret}
             onFocus={handleFocus}
