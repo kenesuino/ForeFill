@@ -29,7 +29,7 @@ export type ForeFillSize = 'sm' | 'md' | 'lg';
  */
 export type ForeFillMatchMode = Exclude<MatchMode, 'fuzzy'>;
 export type HelperVisibility = boolean | 'idle';
-export type ForeFillSurface = 'textarea' | 'input' | 'textbox' | 'richtext';
+export type ForeFillSurface = 'textarea' | 'input' | 'richtext';
 
 export interface ForeFillTriggerSuggestion {
   /** Text that activates this suggestion group, such as '@', '$', or 'Happy'. */
@@ -45,8 +45,8 @@ export interface ForeFillTriggerSuggestion {
 export interface ForeFillProps {
   /**
    * Editable surface to render.
-   * `textarea` is multiline, `input` / `textbox` is single-line, and
-   * `richtext` renders a contenteditable plain-text surface.
+   * `textarea` is multiline, `input` is single-line, and `richtext` renders a
+   * contenteditable plain-text surface.
    */
   as?: ForeFillSurface;
   /** Static suggestion list. Ignored if `asyncSuggestions` is provided. */
@@ -78,16 +78,10 @@ export interface ForeFillProps {
   className?: string;
   /** Classes merged onto the editable surface. */
   editorClassName?: string;
-  /** Classes merged onto the editable surface. Kept as a textarea-era alias. */
-  textareaClassName?: string;
-  /** Input type when `as` is `input` or `textbox`. Default 'text'. */
+  /** Input type when `as` is `input`. Default 'text'. */
   inputType?: string;
   /** Classes merged onto the inline helper. */
   helperClassName?: string;
-  /** Styles merged onto the inline helper. */
-  helperStyle?: CSSProperties;
-  /** Classes merged onto the built-in helper keycaps. */
-  helperKeyClassName?: string;
   /** Visible rows. Default 3. */
   rows?: number;
   /** Disable the component. */
@@ -100,12 +94,6 @@ export interface ForeFillProps {
   matchMode?: ForeFillMatchMode;
   /** Disable the automatic inline ghost suggestion. */
   disableInlineFill?: boolean;
-  /**
-   * Render the inline ghost hint even when the surface is not focused.
-   * Off by default — intended for autoplaying showcases/marketing demos that
-   * drive the value programmatically without stealing keyboard focus.
-   */
-  previewActive?: boolean;
   /**
    * Let ArrowDown and ArrowUp cycle through matching inline suggestions.
    * Only applies when more than one matching hint exists. Default true.
@@ -132,17 +120,10 @@ export interface ForeFillProps {
   /** Controlled value. */
   value?: string;
   /**
-   * Validation flag. Paints the error treatment and sets `aria-invalid`.
-   * Shorthand for `status="error"`.
-   */
-  invalid?: boolean;
-  /**
-   * Explicit visual status. Overrides `invalid`. `loading` shows the
+   * Explicit visual status. `loading` shows the
    * indeterminate progress bar (also driven automatically by async fetches).
    */
   status?: 'idle' | 'loading' | 'success' | 'error';
-  /** Message rendered beneath the field and announced to assistive tech. */
-  statusMessage?: ReactNode;
   /** Force a color scheme. Omit to follow the OS `prefers-color-scheme`. */
   theme?: 'light' | 'dark';
 
@@ -157,14 +138,8 @@ export interface ForeFillProps {
   readOnly?: boolean;
   /** Maximum character length (input/textarea). */
   maxLength?: number;
-  /** Associates the field with a `<form id>` outside its DOM subtree. */
-  form?: string;
   /** Autofocus the field on mount. */
   autoFocus?: boolean;
-  /** `autocomplete` attribute. Defaults to `'off'`. */
-  autoComplete?: string;
-  /** `spellcheck` attribute. Defaults to `false`. */
-  spellCheck?: boolean;
 
   // ----- Accept / commit behavior ----------------------------------------
   /**
@@ -232,8 +207,6 @@ const useBrowserLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 type EditableElement = HTMLTextAreaElement | HTMLInputElement | HTMLDivElement;
-type NormalizedSurface = 'textarea' | 'input' | 'richtext';
-
 function getSuggestionParts(
   suggestion: string,
   typedValue: string
@@ -411,10 +384,6 @@ function nextWordLength(suffix: string): number {
   return match ? match[0].length : suffix.length;
 }
 
-function normalizeSurface(surface: ForeFillSurface): NormalizedSurface {
-  return surface === 'textbox' ? 'input' : surface;
-}
-
 function getEditableText(node: EditableElement): string {
   if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) {
     return node.value;
@@ -510,18 +479,14 @@ export const ForeFill = forwardRef(function ForeFill(
     placeholder = DEFAULTS.placeholder,
     className,
     editorClassName,
-    textareaClassName,
     inputType = 'text',
     helperClassName,
-    helperStyle,
-    helperKeyClassName,
     rows = DEFAULTS.rows,
     disabled = false,
     variant = DEFAULTS.variant,
     size = DEFAULTS.size,
     matchMode = DEFAULTS.matchMode,
     disableInlineFill = DEFAULTS.disableInlineFill,
-    previewActive = false,
     enableArrowNavigation = DEFAULTS.enableArrowNavigation,
     minQueryLength = DEFAULTS.minQueryLength,
     debounceMs = DEFAULTS.debounceMs,
@@ -531,26 +496,21 @@ export const ForeFill = forwardRef(function ForeFill(
     helperText,
     defaultValue = '',
     value,
-    invalid = false,
     status,
-    statusMessage,
     theme,
     name,
     id,
     required = false,
     readOnly = false,
     maxLength,
-    form,
     autoFocus = false,
-    autoComplete = 'off',
-    spellCheck = false,
     acceptOnEnter = true,
     commitOnBlur = false,
     partialAccept = true,
   } = props;
 
   const isControlled = value !== undefined;
-  const surface = normalizeSurface(as);
+  const surface = as;
   const [internalValue, setInternalValue] = useState(defaultValue);
   const currentValue = isControlled ? (value as string) : internalValue;
 
@@ -573,7 +533,6 @@ export const ForeFill = forwardRef(function ForeFill(
   // keeps rendering instead of being suppressed by a mid-string caret.
   const forceCaretEndRef = useRef(false);
   const helperId = useId();
-  const statusId = useId();
 
   const completionContext = useMemo(
     () => getCompletionContext(currentValue, activeSegmentStart),
@@ -804,11 +763,11 @@ export const ForeFill = forwardRef(function ForeFill(
 
   useEffect(() => {
     if (
-      !(isFocused || previewActive) ||
+      !isFocused ||
       disableInlineFill ||
       readOnly ||
       isDeletingRef.current ||
-      (!caretAtEnd && !previewActive) ||
+      !caretAtEnd ||
       dismissedValueRef.current === currentValue ||
       (asyncSuggestions && isLoading && !activeTrigger)
     ) {
@@ -853,7 +812,6 @@ export const ForeFill = forwardRef(function ForeFill(
     isLoading,
     matches,
     minQueryLength,
-    previewActive,
     readOnly,
   ]);
 
@@ -913,7 +871,7 @@ export const ForeFill = forwardRef(function ForeFill(
     setGhostPrefixOffset((current) =>
       Math.abs(current - nextOffset) < 1 ? current : nextOffset
     );
-  }, [className, editorClassName, ghostPrefix, size, surface, textareaClassName]);
+  }, [className, editorClassName, ghostPrefix, size, surface]);
 
   const editorPrefixStyle: CSSProperties | undefined =
     ghostTextParts && ghostPrefixOffset > 0
@@ -928,17 +886,17 @@ export const ForeFill = forwardRef(function ForeFill(
     <>
       {canCycleSuggestions && (
         <>
-          <kbd className={cx('ff-key', helperKeyClassName)}>Up</kbd>
+          <kbd className="ff-key">Up</kbd>
           <span>or</span>
-          <kbd className={cx('ff-key', helperKeyClassName)}>Down</kbd>
+          <kbd className="ff-key">Down</kbd>
           <span>changes hint.</span>
         </>
       )}
-      <kbd className={cx('ff-key', helperKeyClassName)}>Tab</kbd>
+      <kbd className="ff-key">Tab</kbd>
       <span>or</span>
-      <kbd className={cx('ff-key', helperKeyClassName)}>Enter</kbd>
+      <kbd className="ff-key">Enter</kbd>
       <span>accepts the hint.</span>
-      <kbd className={cx('ff-key', helperKeyClassName)}>Esc</kbd>
+      <kbd className="ff-key">Esc</kbd>
       <span>hides it.</span>
     </>
   );
@@ -949,11 +907,7 @@ export const ForeFill = forwardRef(function ForeFill(
   const resolvedState: 'idle' | 'success' | 'error' =
     status === 'error' || status === 'success'
       ? status
-      : invalid
-        ? 'error'
-        : 'idle';
-  const hasStatusMessage =
-    statusMessage !== null && statusMessage !== undefined && statusMessage !== false;
+      : 'idle';
 
   // Single polite announcement for assistive tech. The ghost overlay is
   // `aria-hidden`, so without this a screen-reader user never learns a
@@ -966,14 +920,12 @@ export const ForeFill = forwardRef(function ForeFill(
         : `Suggestion available: ${ghostText}. Press Tab or Enter to accept.`
       : '';
 
-  const describedBy =
-    cx(showHelperText && helperId, hasStatusMessage && statusId) || undefined;
+  const describedBy = (showHelperText && helperId) || undefined;
 
   const editableClassName = cx(
     'ff-editor',
     surface === 'input' && 'ff-editor--input',
     surface === 'richtext' && 'ff-editor--richtext',
-    textareaClassName,
     editorClassName
   );
 
@@ -996,7 +948,6 @@ export const ForeFill = forwardRef(function ForeFill(
     required,
     readOnly,
     maxLength,
-    form,
     autoFocus,
   };
 
@@ -1028,7 +979,6 @@ export const ForeFill = forwardRef(function ForeFill(
             {showHelperText && (
               <span
                 className={cx('ff-helper', helperClassName)}
-                style={helperStyle}
               >
                 <span className="ff-helper-separator" aria-hidden="true">
                   |
@@ -1054,8 +1004,8 @@ export const ForeFill = forwardRef(function ForeFill(
             placeholder={placeholder}
             rows={rows}
             disabled={disabled}
-            spellCheck={spellCheck}
-            autoComplete={autoComplete}
+            spellCheck={false}
+            autoComplete="off"
             {...nativeFormProps}
             {...editorAriaProps}
             className={editableClassName}
@@ -1078,8 +1028,8 @@ export const ForeFill = forwardRef(function ForeFill(
             placeholder={placeholder}
             disabled={disabled}
             type={inputType}
-            spellCheck={spellCheck}
-            autoComplete={autoComplete}
+            spellCheck={false}
+            autoComplete="off"
             {...nativeFormProps}
             {...editorAriaProps}
             className={editableClassName}
@@ -1101,7 +1051,7 @@ export const ForeFill = forwardRef(function ForeFill(
             {...editorAriaProps}
             data-placeholder={placeholder}
             data-empty={currentValue.length === 0}
-            spellCheck={spellCheck}
+            spellCheck={false}
             tabIndex={disabled ? -1 : 0}
             onInput={handleRichTextInput}
             onKeyDown={handleKeyDown}
@@ -1113,16 +1063,6 @@ export const ForeFill = forwardRef(function ForeFill(
           />
         )}
       </div>
-
-      {hasStatusMessage && (
-        <div
-          id={statusId}
-          className="ff-status"
-          role={resolvedState === 'error' ? 'alert' : 'status'}
-        >
-          {statusMessage}
-        </div>
-      )}
 
       {showHelperText && (
         <span id={helperId} className="ff-sr-only">

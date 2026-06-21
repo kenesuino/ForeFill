@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { resolve } from 'node:path';
 
 export default defineConfig({
+  base: process.env.GITHUB_PAGES === 'true' ? '/ForeFill/' : '/',
   plugins: [react()],
   server: {
     host: '127.0.0.1',
@@ -10,17 +10,6 @@ export default defineConfig({
     strictPort: false,
   },
   build: {
-    lib: {
-      entry: resolve(__dirname, 'src/lib/index.ts'),
-      name: 'ForeFill',
-      formats: ['es', 'cjs'],
-      fileName: (format) => (format === 'es' ? 'index.js' : 'index.cjs'),
-    },
-    rollupOptions: {
-      external: ['react', 'react/jsx-runtime'],
-      output: {
-        exports: 'named',
-      },
-    },
+    outDir: 'site-dist',
   },
 });

@@ -12,7 +12,7 @@
    Theming hooks of note:
      --ff-accent      primary interaction color
      --ff-success     success / valid state color
-     --ff-danger      error / invalid state color
+     --ff-danger      error state color
      --ff-radius      corner rounding (fluid via clamp by default)
      --ff-font        font stack
    Dark mode is automatic (prefers-color-scheme) and can be forced with

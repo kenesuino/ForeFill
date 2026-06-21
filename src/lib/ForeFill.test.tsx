@@ -29,11 +29,6 @@ describe('ForeFill — rendering', () => {
     render(<ForeFill as="input" suggestions={REPLIES} placeholder="Search" />);
     expect(screen.getByRole('textbox').tagName).toBe('INPUT');
   });
-
-  it('treats as="textbox" as an alias for input', () => {
-    render(<ForeFill as="textbox" suggestions={REPLIES} placeholder="Search" />);
-    expect(screen.getByRole('textbox').tagName).toBe('INPUT');
-  });
 });
 
 describe('ForeFill — inline ghost', () => {
@@ -237,6 +232,23 @@ describe('ForeFill — form integration', () => {
     // readOnly inputs can't be typed into; even forcing focus shows no ghost.
     await new Promise((r) => setTimeout(r, 20));
     expect(document.querySelector('.ff-ghost')).toBeNull();
+  });
+
+  it('uses status="error" for error styling and aria-invalid', () => {
+    const { container } = render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        status="error"
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    expect(field).toHaveAttribute('aria-invalid', 'true');
+    expect(container.querySelector('.ff-root')).toHaveAttribute(
+      'data-state',
+      'error'
+    );
   });
 });
 

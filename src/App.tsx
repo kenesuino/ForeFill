@@ -33,9 +33,11 @@ import {
 
 const PKG = 'forefill';
 const VERSION = '0.1.0';
-const REPO_URL = 'https://github.com/your-org/forefill';
+const REPO_URL = 'https://github.com/kenesuino/ForeFill';
 const THEME_KEY = 'forefill-theme';
-const LOT_URL = '/ForeFill.json';
+const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`;
+const LOT_URL = assetUrl('ForeFill.json');
+const LOGO_URL = assetUrl('ForeFill.svg');
 
 type Page = 'hero' | 'documentation' | 'playground';
 type ThemeMode = 'light' | 'dark';
@@ -60,7 +62,6 @@ interface PlaygroundState {
   triggerMode: TriggerMode;
   disableInlineFill: boolean;
   enableArrowNavigation: boolean;
-  previewActive: boolean;
   acceptOnEnter: boolean;
   commitOnBlur: boolean;
   partialAccept: boolean;
@@ -68,17 +69,12 @@ interface PlaygroundState {
   helperIdleMs: number;
   helperText: string;
   status: StatusMode;
-  statusMessage: string;
-  invalid: boolean;
   name: string;
   id: string;
   required: boolean;
   readOnly: boolean;
   maxLength: number;
-  form: string;
   autoFocus: boolean;
-  autoComplete: string;
-  spellCheck: boolean;
   disabled: boolean;
 }
 
@@ -88,6 +84,7 @@ interface ApiProp {
   def: string;
   desc: string;
   purpose: string;
+  example: string;
 }
 
 const PAGE_LINKS: Array<{ page: Page; hash: string; label: string }> = [
@@ -96,7 +93,7 @@ const PAGE_LINKS: Array<{ page: Page; hash: string; label: string }> = [
   { page: 'playground', hash: '#playground', label: 'Playground' },
 ];
 
-const DOC_LINKS = [
+const GUIDE_SECTIONS = [
   { id: 'installation', label: 'Installation' },
   { id: 'quick-start', label: 'Quick start' },
   { id: 'trigger-suggestions', label: 'Trigger suggestions' },
@@ -178,10 +175,11 @@ const HERO_TYPING_ITEMS = [
 const API_PROPS: ApiProp[] = [
   {
     name: 'as',
-    type: "'textarea' | 'input' | 'textbox' | 'richtext'",
+    type: "'textarea' | 'input' | 'richtext'",
     def: "'textarea'",
     desc: 'Editable surface to render.',
     purpose: 'Switches between multiline text, single-line input, and a plain-text contenteditable surface.',
+    example: '<ForeFill as="input" suggestions={suggestions} />',
   },
   {
     name: 'suggestions',
@@ -189,6 +187,7 @@ const API_PROPS: ApiProp[] = [
     def: '[]',
     desc: 'Static suggestion list.',
     purpose: 'The normal phrase list used when no trigger completion is active.',
+    example: '<ForeFill suggestions={["Thanks so much!"]} />',
   },
   {
     name: 'triggerSuggestions',
@@ -196,6 +195,7 @@ const API_PROPS: ApiProp[] = [
     def: '[]',
     desc: 'Custom trigger completions for symbols or words.',
     purpose: 'Use this for @ domains, $ variables, & snippets, or word triggers like Happy -> " Birthday!".',
+    example: '<ForeFill triggerSuggestions={[{ trigger: "@", suggestions: ["gmail.com"] }]} />',
   },
   {
     name: 'asyncSuggestions',
@@ -203,6 +203,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Async suggestion source. Overrides suggestions.',
     purpose: 'Receives the active typed query, including appended text after an existing value.',
+    example: '<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={250} />',
   },
   {
     name: 'onCommit',
@@ -210,6 +211,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Runs when a value is committed.',
     purpose: 'Persist the final field value after Enter, Tab, or blur when commitOnBlur is enabled.',
+    example: '<ForeFill onCommit={(value) => save(value)} />',
   },
   {
     name: 'onChange',
@@ -217,6 +219,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Runs on every value change.',
     purpose: 'Use this for controlled state or analytics on typed text.',
+    example: '<ForeFill value={value} onChange={setValue} />',
   },
   {
     name: 'onAccept',
@@ -224,6 +227,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Runs only when a suggestion is accepted.',
     purpose: 'Track suggestion adoption separately from plain commits.',
+    example: '<ForeFill onAccept={(_value, suggestion) => track(suggestion)} />',
   },
   {
     name: 'onDismiss',
@@ -231,6 +235,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Runs when Escape hides a visible hint.',
     purpose: 'Measure or react to explicit suggestion dismissal.',
+    example: '<ForeFill onDismiss={() => track("dismissed")} />',
   },
   {
     name: 'placeholder',
@@ -238,6 +243,7 @@ const API_PROPS: ApiProp[] = [
     def: "'Type to search...'",
     desc: 'Editable surface placeholder.',
     purpose: 'Sets the native placeholder or richtext placeholder text.',
+    example: '<ForeFill placeholder="Write a reply..." />',
   },
   {
     name: 'className',
@@ -245,6 +251,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Class for the root wrapper.',
     purpose: 'Attach layout classes or CSS variable overrides to the component root.',
+    example: '<ForeFill className="reply-field" />',
   },
   {
     name: 'editorClassName',
@@ -252,20 +259,15 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Class for the editable surface.',
     purpose: 'Style the textarea, input, or richtext element directly.',
-  },
-  {
-    name: 'textareaClassName',
-    type: 'string',
-    def: '-',
-    desc: 'Alias for editorClassName.',
-    purpose: 'Kept for compatibility with textarea-era integrations.',
+    example: '<ForeFill editorClassName="reply-editor" />',
   },
   {
     name: 'inputType',
     type: 'string',
     def: "'text'",
-    desc: 'Input type for input/textbox surfaces.',
+    desc: 'Input type for input surfaces.',
     purpose: 'Use email, search, url, tel, password, or another valid input type.',
+    example: '<ForeFill as="input" inputType="email" />',
   },
   {
     name: 'helperClassName',
@@ -273,20 +275,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Class for the inline helper.',
     purpose: 'Customize the helper that appears beside the ghost hint.',
-  },
-  {
-    name: 'helperStyle',
-    type: 'CSSProperties',
-    def: '-',
-    desc: 'Inline styles for the helper.',
-    purpose: 'Apply one-off helper styling without a CSS class.',
-  },
-  {
-    name: 'helperKeyClassName',
-    type: 'string',
-    def: '-',
-    desc: 'Class for built-in keycaps.',
-    purpose: 'Customize the Tab, Enter, Esc, and arrow keycap treatment.',
+    example: '<ForeFill showHelper helperClassName="reply-helper" />',
   },
   {
     name: 'rows',
@@ -294,6 +283,7 @@ const API_PROPS: ApiProp[] = [
     def: '3',
     desc: 'Visible textarea rows.',
     purpose: 'Only affects the textarea surface.',
+    example: '<ForeFill as="textarea" rows={5} />',
   },
   {
     name: 'disabled',
@@ -301,6 +291,7 @@ const API_PROPS: ApiProp[] = [
     def: 'false',
     desc: 'Disables the editable surface.',
     purpose: 'Prevents input and suppresses interactive completion.',
+    example: '<ForeFill disabled />',
   },
   {
     name: 'variant',
@@ -308,6 +299,7 @@ const API_PROPS: ApiProp[] = [
     def: "'outline'",
     desc: 'Visual style preset.',
     purpose: 'Choose the built-in border/fill treatment.',
+    example: '<ForeFill variant="filled" />',
   },
   {
     name: 'size',
@@ -315,6 +307,7 @@ const API_PROPS: ApiProp[] = [
     def: "'md'",
     desc: 'Size preset.',
     purpose: 'Adjusts font size, padding, and minimum height.',
+    example: '<ForeFill size="lg" />',
   },
   {
     name: 'matchMode',
@@ -322,6 +315,7 @@ const API_PROPS: ApiProp[] = [
     def: "'substring'",
     desc: 'Normal suggestion matching strategy.',
     purpose: 'Trigger suggestions always use startsWith; this controls the normal suggestions list.',
+    example: '<ForeFill matchMode="startsWith" />',
   },
   {
     name: 'disableInlineFill',
@@ -329,13 +323,7 @@ const API_PROPS: ApiProp[] = [
     def: 'false',
     desc: 'Disables the ghost hint.',
     purpose: 'Keeps change/commit behavior but hides automatic inline completion.',
-  },
-  {
-    name: 'previewActive',
-    type: 'boolean',
-    def: 'false',
-    desc: 'Shows ghost hints while unfocused.',
-    purpose: 'Useful for demos that drive a controlled value without stealing focus.',
+    example: '<ForeFill disableInlineFill />',
   },
   {
     name: 'enableArrowNavigation',
@@ -343,6 +331,7 @@ const API_PROPS: ApiProp[] = [
     def: 'true',
     desc: 'Allows Up/Down to cycle hints.',
     purpose: 'Turn this off if arrow keys must stay reserved for another editor behavior.',
+    example: '<ForeFill enableArrowNavigation={false} />',
   },
   {
     name: 'minQueryLength',
@@ -350,6 +339,7 @@ const API_PROPS: ApiProp[] = [
     def: '1',
     desc: 'Characters before normal suggestions activate.',
     purpose: 'Trigger suggestions have their own optional minQueryLength.',
+    example: '<ForeFill minQueryLength={3} />',
   },
   {
     name: 'debounceMs',
@@ -357,6 +347,7 @@ const API_PROPS: ApiProp[] = [
     def: '0',
     desc: 'Debounce delay for async suggestions.',
     purpose: 'Reduces network traffic while the user is typing.',
+    example: '<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={300} />',
   },
   {
     name: 'ariaLabel',
@@ -364,6 +355,7 @@ const API_PROPS: ApiProp[] = [
     def: 'placeholder',
     desc: 'Accessible label for the field.',
     purpose: 'Use when the visual label is outside the component or absent.',
+    example: '<ForeFill ariaLabel="Compose reply" />',
   },
   {
     name: 'showHelper',
@@ -371,6 +363,7 @@ const API_PROPS: ApiProp[] = [
     def: 'false',
     desc: 'Controls inline helper visibility.',
     purpose: 'Show keyboard helper text immediately, after idle, or never.',
+    example: '<ForeFill showHelper="idle" />',
   },
   {
     name: 'helperIdleMs',
@@ -378,6 +371,7 @@ const API_PROPS: ApiProp[] = [
     def: '900',
     desc: 'Idle delay before helper appears.',
     purpose: 'Only applies when showHelper is set to idle.',
+    example: '<ForeFill showHelper="idle" helperIdleMs={1200} />',
   },
   {
     name: 'helperText',
@@ -385,6 +379,7 @@ const API_PROPS: ApiProp[] = [
     def: 'keycap helper',
     desc: 'Custom inline helper content.',
     purpose: 'Replace the built-in helper copy with your own React content.',
+    example: '<ForeFill showHelper helperText="Tab accepts" />',
   },
   {
     name: 'defaultValue',
@@ -392,6 +387,7 @@ const API_PROPS: ApiProp[] = [
     def: "''",
     desc: 'Initial uncontrolled value.',
     purpose: 'ForeFill can still suggest newly appended text after this value.',
+    example: '<ForeFill defaultValue="Existing text. " />',
   },
   {
     name: 'value',
@@ -399,27 +395,15 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Controlled value.',
     purpose: 'Pair with onChange for fully controlled forms.',
-  },
-  {
-    name: 'invalid',
-    type: 'boolean',
-    def: 'false',
-    desc: 'Error treatment and aria-invalid.',
-    purpose: 'Shortcut for the error visual state.',
+    example: '<ForeFill value={value} onChange={setValue} />',
   },
   {
     name: 'status',
     type: "'idle' | 'loading' | 'success' | 'error'",
     def: '-',
     desc: 'Explicit visual status.',
-    purpose: 'Overrides invalid and can show loading/success/error treatment.',
-  },
-  {
-    name: 'statusMessage',
-    type: 'ReactNode',
-    def: '-',
-    desc: 'Message rendered beneath the field.',
-    purpose: 'Announces validation or loading context to assistive tech.',
+    purpose: 'Shows loading, success, or error treatment; error also sets aria-invalid.',
+    example: '<ForeFill status="error" />',
   },
   {
     name: 'theme',
@@ -427,6 +411,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Forces a color scheme.',
     purpose: 'Omit it to follow the OS preference or surrounding page theme.',
+    example: '<ForeFill theme="dark" />',
   },
   {
     name: 'name',
@@ -434,6 +419,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Native form name.',
     purpose: 'Forwarded to input and textarea for form submission.',
+    example: '<ForeFill as="input" name="reply" />',
   },
   {
     name: 'id',
@@ -441,6 +427,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Editable element id.',
     purpose: 'Pair with a label htmlFor value.',
+    example: '<ForeFill id="reply" />',
   },
   {
     name: 'required',
@@ -448,6 +435,7 @@ const API_PROPS: ApiProp[] = [
     def: 'false',
     desc: 'Marks the field required.',
     purpose: 'Forwarded to input/textarea and reflected with aria-required.',
+    example: '<ForeFill required />',
   },
   {
     name: 'readOnly',
@@ -455,6 +443,7 @@ const API_PROPS: ApiProp[] = [
     def: 'false',
     desc: 'Renders read-only and suppresses hints.',
     purpose: 'Show a value without allowing edits or completions.',
+    example: '<ForeFill readOnly value="Saved reply" />',
   },
   {
     name: 'maxLength',
@@ -462,13 +451,7 @@ const API_PROPS: ApiProp[] = [
     def: '-',
     desc: 'Maximum character length.',
     purpose: 'Forwarded to input and textarea surfaces.',
-  },
-  {
-    name: 'form',
-    type: 'string',
-    def: '-',
-    desc: 'External form id.',
-    purpose: 'Associates input/textarea with a form outside its DOM subtree.',
+    example: '<ForeFill maxLength={280} />',
   },
   {
     name: 'autoFocus',
@@ -476,20 +459,7 @@ const API_PROPS: ApiProp[] = [
     def: 'false',
     desc: 'Focuses the field on mount.',
     purpose: 'Useful for dialogs or focused writing tools.',
-  },
-  {
-    name: 'autoComplete',
-    type: 'string',
-    def: "'off'",
-    desc: 'Native autocomplete attribute.',
-    purpose: 'Controls browser autofill behavior independently from ForeFill.',
-  },
-  {
-    name: 'spellCheck',
-    type: 'boolean',
-    def: 'false',
-    desc: 'Native spellcheck attribute.',
-    purpose: 'Enable browser spelling assistance when useful.',
+    example: '<ForeFill autoFocus />',
   },
   {
     name: 'acceptOnEnter',
@@ -497,6 +467,7 @@ const API_PROPS: ApiProp[] = [
     def: 'true',
     desc: 'Lets Enter accept visible hints.',
     purpose: 'When false, Enter commits typed text and Tab still accepts hints.',
+    example: '<ForeFill acceptOnEnter={false} />',
   },
   {
     name: 'commitOnBlur',
@@ -504,6 +475,7 @@ const API_PROPS: ApiProp[] = [
     def: 'false',
     desc: 'Commits on blur.',
     purpose: 'Persist the current value when focus leaves the field.',
+    example: '<ForeFill commitOnBlur onCommit={save} />',
   },
   {
     name: 'partialAccept',
@@ -511,6 +483,7 @@ const API_PROPS: ApiProp[] = [
     def: 'true',
     desc: 'Accept one word with Ctrl/Cmd + ArrowRight.',
     purpose: 'Lets users take long hints gradually.',
+    example: '<ForeFill partialAccept={false} />',
   },
 ];
 
@@ -531,10 +504,17 @@ function getPageFromHash(): Page {
   if (typeof window === 'undefined') return 'hero';
   const hash = window.location.hash.replace(/^#/, '') || 'hero';
   if (hash === 'playground') return 'playground';
-  if (hash === 'documentation' || DOC_LINKS.some((link) => link.id === hash)) {
+  if (hash === 'documentation' || isDocumentationHash(hash)) {
     return 'documentation';
   }
   return 'hero';
+}
+
+/** True when a hash targets the documentation page (a guide, a category, or a prop anchor). */
+function isDocumentationHash(hash: string): boolean {
+  if (GUIDE_SECTIONS.some((section) => section.id === hash)) return true;
+  if (DOC_CATEGORIES.some((category) => category.id === hash)) return true;
+  return DOC_CATEGORIES.some((category) => category.props.includes(hash));
 }
 
 function useHashPage(): Page {
@@ -584,7 +564,7 @@ export default function App() {
           onToggleTheme={() => setTheme((value) => (value === 'light' ? 'dark' : 'light'))}
         />
         {page === 'hero' && <HeroPage theme={theme} />}
-        {page === 'documentation' && <DocumentationPage />}
+        {page === 'documentation' && <DocumentationPage theme={theme} />}
         {page === 'playground' && <PlaygroundPage theme={theme} />}
         <Footer />
       </div>
@@ -634,7 +614,7 @@ function TopNav({
     <header className="sticky top-0 z-40 border-b border-[#D7DEE9] bg-white/85 backdrop-blur dark:border-white/10 dark:bg-[#10131A]/85">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <a href="#hero" className="flex items-center gap-3">
-          <img src="/ForeFill.svg" alt="" className="h-8 w-14 dark:invert" />
+          <img src={LOGO_URL} alt="" className="h-8 w-14 dark:invert" />
           <span className="font-extrabold tracking-tight">
             Fore<span className="text-[#6F84B2]">Fill</span>
           </span>
@@ -687,7 +667,7 @@ function HeroPage({ theme }: { theme: ThemeMode }) {
         <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[0.95fr_1.05fr] lg:px-8 lg:py-20">
           <div className="flex flex-col justify-center">
             <div className="mb-6 flex items-center gap-4">
-              <img src="/ForeFill.svg" alt="" className="h-14 w-24 dark:invert" />
+              <img src={LOGO_URL} alt="" className="h-14 w-24 dark:invert" />
               <span className="rounded-md border border-[#D7DEE9] px-2 py-1 text-xs font-bold text-[#526078] dark:border-white/10 dark:text-[#A8B3C7]">
                 React inline autocomplete
               </span>
@@ -738,7 +718,6 @@ function HeroPage({ theme }: { theme: ThemeMode }) {
 function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
   const [index, setIndex] = useState(0);
   const [values, setValues] = useState({ to: '', subject: '', body: '' });
-  const [phase, setPhase] = useState<'typing' | 'hint' | 'accepted'>('typing');
   const item = HERO_TYPING_ITEMS[index];
 
   useEffect(() => {
@@ -751,7 +730,6 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
     if (index === 0) {
       setValues({ to: '', subject: '', body: '' });
     }
-    setPhase('typing');
     setValues((current) => ({ ...current, [item.field]: '' }));
 
     const chars = Array.from(item.seed);
@@ -767,10 +745,8 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
     });
 
     const typedAt = 360 + chars.length * 70;
-    schedule(() => setPhase('hint'), typedAt + 760);
     schedule(() => {
       setValues((current) => ({ ...current, [item.field]: item.full }));
-      setPhase('accepted');
     }, typedAt + 1520);
     schedule(
       () => setIndex((current) => (current + 1) % HERO_TYPING_ITEMS.length),
@@ -805,7 +781,6 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
             placeholder="recipient@"
             ariaLabel="Compose recipient"
             showHelper={false}
-            previewActive={item.field === 'to' && phase !== 'accepted'}
             theme={theme}
           />
         </ComposeRow>
@@ -822,7 +797,6 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
             placeholder="Subject"
             ariaLabel="Compose subject"
             showHelper={false}
-            previewActive={item.field === 'subject' && phase !== 'accepted'}
             theme={theme}
           />
         </ComposeRow>
@@ -838,7 +812,6 @@ function HeroTypingShowcase({ theme }: { theme: ThemeMode }) {
             ariaLabel="Compose message"
             rows={5}
             showHelper="idle"
-            previewActive={item.field === 'body' && phase !== 'accepted'}
             theme={theme}
           />
         </div>
@@ -947,28 +920,726 @@ function SampleSection({ theme }: { theme: ThemeMode }) {
   );
 }
 
-function DocumentationPage() {
+type DemoValue = string | number | boolean;
+
+type PropControl =
+  | { kind: 'boolean'; default: boolean }
+  | { kind: 'select'; options: string[]; default: string }
+  | { kind: 'number'; default: number; min?: number; max?: number }
+  | { kind: 'text'; default: string };
+
+interface PropDemo {
+  /** Optional live control letting the reader change this prop's value. */
+  control?: PropControl;
+  render: (value: DemoValue) => ReactNode;
+  code: (value: DemoValue) => string;
+}
+
+interface DocCategory {
+  id: string;
+  label: string;
+  icon: ReactNode;
+  blurb: string;
+  props: string[];
+}
+
+type DemoEvent = 'onChange' | 'onCommit' | 'onAccept' | 'onDismiss';
+
+const PROP_BY_NAME: Record<string, ApiProp> = Object.fromEntries(
+  API_PROPS.map((prop) => [prop.name, prop])
+);
+
+const DOC_CATEGORIES: DocCategory[] = [
+  {
+    id: 'cat-surfaces',
+    label: 'Surfaces & content',
+    icon: <SlidersHorizontal className="h-5 w-5" />,
+    blurb: 'Choose the editable surface and seed its starting content.',
+    props: ['as', 'rows', 'inputType', 'placeholder', 'defaultValue', 'value'],
+  },
+  {
+    id: 'cat-suggestions',
+    label: 'Suggestions & matching',
+    icon: <WandSparkles className="h-5 w-5" />,
+    blurb: 'Where completions come from and how the typed query is matched.',
+    props: [
+      'suggestions',
+      'triggerSuggestions',
+      'asyncSuggestions',
+      'matchMode',
+      'minQueryLength',
+      'debounceMs',
+    ],
+  },
+  {
+    id: 'cat-behavior',
+    label: 'Inline behavior',
+    icon: <Zap className="h-5 w-5" />,
+    blurb: 'Tune how the ghost hint appears and how it is accepted.',
+    props: [
+      'disableInlineFill',
+      'enableArrowNavigation',
+      'acceptOnEnter',
+      'commitOnBlur',
+      'partialAccept',
+    ],
+  },
+  {
+    id: 'cat-helper',
+    label: 'Helper',
+    icon: <Sparkles className="h-5 w-5" />,
+    blurb: 'The inline keyboard hint shown next to the ghost.',
+    props: ['showHelper', 'helperIdleMs', 'helperText'],
+  },
+  {
+    id: 'cat-status',
+    label: 'Status',
+    icon: <Check className="h-5 w-5" />,
+    blurb: 'Surface loading, success, and error states with assistive announcements.',
+    props: ['status'],
+  },
+  {
+    id: 'cat-appearance',
+    label: 'Appearance',
+    icon: <Sun className="h-5 w-5" />,
+    blurb: 'Built-in visual presets and color scheme.',
+    props: ['variant', 'size', 'theme', 'disabled'],
+  },
+  {
+    id: 'cat-events',
+    label: 'Events',
+    icon: <Play className="h-5 w-5" />,
+    blurb: 'Callbacks for every meaningful moment. Type in each field to watch them fire.',
+    props: ['onChange', 'onCommit', 'onAccept', 'onDismiss'],
+  },
+  {
+    id: 'cat-form',
+    label: 'Form & native',
+    icon: <Clipboard className="h-5 w-5" />,
+    blurb: 'Native attributes forwarded to the input or textarea for form submission.',
+    props: ['name', 'id', 'required', 'readOnly', 'maxLength', 'autoFocus'],
+  },
+  {
+    id: 'cat-styling',
+    label: 'Styling hooks',
+    icon: <Code2 className="h-5 w-5" />,
+    blurb: 'Class hooks for the root, editor, helper, and the accessible label.',
+    props: ['className', 'editorClassName', 'helperClassName', 'ariaLabel'],
+  },
+];
+
+const PROP_DEMOS: Record<string, PropDemo> = {
+  // ----- Surfaces & content -------------------------------------------------
+  as: {
+    control: { kind: 'select', options: ['textarea', 'input', 'richtext'], default: 'input' },
+    render: (value) => (
+      <ForeFill as={value as ForeFillSurface} suggestions={DEFAULT_SUGGESTIONS} placeholder={`${value} — type 'Thanks'`} showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill as="${value}" suggestions={suggestions} />`,
+  },
+  rows: {
+    control: { kind: 'number', default: 4, min: 1, max: 12 },
+    render: (value) => (
+      <ForeFill as="textarea" rows={value as number} suggestions={DEFAULT_SUGGESTIONS} placeholder="Type 'Looking'" showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill as="textarea" rows={${value}} suggestions={suggestions} />`,
+  },
+  inputType: {
+    control: { kind: 'select', options: ['text', 'email', 'search', 'url', 'tel', 'password'], default: 'email' },
+    render: (value) => (
+      <ForeFill as="input" inputType={String(value)} suggestions={DEFAULT_SUGGESTIONS} placeholder={`type="${value}"`} showHelper={false} />
+    ),
+    code: (value) => `<ForeFill as="input" inputType="${value}" />`,
+  },
+  placeholder: {
+    control: { kind: 'text', default: 'Write a reply...' },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} placeholder={String(value)} showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill placeholder="${value}" suggestions={suggestions} />`,
+  },
+  defaultValue: {
+    control: { kind: 'text', default: 'Happy to help — let me take a look. ' },
+    render: (value) => (
+      <ForeFill key={String(value)} defaultValue={String(value)} suggestions={DEFAULT_SUGGESTIONS} placeholder="Type 'Thanks' after the saved text" showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill defaultValue="${value}" suggestions={suggestions} />`,
+  },
+  value: {
+    render: () => <ControlledValueDemo />,
+    code: () => `const [value, setValue] = useState('');
+
+<ForeFill value={value} onChange={setValue} suggestions={suggestions} />`,
+  },
+
+  // ----- Suggestions & matching ---------------------------------------------
+  suggestions: {
+    render: () => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} placeholder="Type 'Thanks' or 'Looking'" showHelper="idle" />
+    ),
+    code: () => `const suggestions = [
+  'Thanks so much for reaching out!',
+  'Looking forward to hearing from you.',
+];
+
+<ForeFill suggestions={suggestions} />`,
+  },
+  triggerSuggestions: {
+    control: { kind: 'select', options: ['all', 'email', 'happy', 'symbols', 'none'], default: 'all' },
+    render: (value) => (
+      <ForeFill as="input" triggerSuggestions={getTriggersForMode(value as TriggerMode)} suggestions={DEFAULT_SUGGESTIONS} placeholder="Type @g, $t, & sh, or Happy" showHelper="idle" />
+    ),
+    code: (value) =>
+      value === 'none'
+        ? `<ForeFill as="input" suggestions={suggestions} />`
+        : `// '${value}' preset
+<ForeFill as="input" triggerSuggestions={triggers} />`,
+  },
+  asyncSuggestions: {
+    control: { kind: 'boolean', default: true },
+    render: (value) =>
+      value ? (
+        <AsyncDemo debounceMs={250} />
+      ) : (
+        <ForeFill suggestions={DEFAULT_SUGGESTIONS} placeholder="Static suggestions — type 'Thanks'" showHelper="idle" />
+      ),
+    code: (value) =>
+      value
+        ? `<ForeFill
+  debounceMs={250}
+  asyncSuggestions={async (query) => {
+    const res = await fetch('/api/suggest?q=' + query);
+    return res.json();
+  }}
+/>`
+        : `<ForeFill suggestions={suggestions} />`,
+  },
+  matchMode: {
+    control: { kind: 'select', options: ['substring', 'startsWith'], default: 'startsWith' },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} matchMode={value as ForeFillMatchMode} placeholder="Type 'Thanks'" showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill matchMode="${value}" suggestions={suggestions} />`,
+  },
+  minQueryLength: {
+    control: { kind: 'number', default: 3, min: 1, max: 10 },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} minQueryLength={value as number} placeholder={`Hints after ${value} characters`} showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill minQueryLength={${value}} suggestions={suggestions} />`,
+  },
+  debounceMs: {
+    control: { kind: 'number', default: 300, min: 0, max: 2000 },
+    render: (value) => <AsyncDemo debounceMs={value as number} />,
+    code: (value) => `<ForeFill debounceMs={${value}} asyncSuggestions={fetchSuggestions} />`,
+  },
+
+  // ----- Inline behavior ----------------------------------------------------
+  disableInlineFill: {
+    control: { kind: 'boolean', default: false },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} disableInlineFill={value as boolean} placeholder="Type 'Thanks'" showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill disableInlineFill={${value}} suggestions={suggestions} />`,
+  },
+  enableArrowNavigation: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} enableArrowNavigation={value as boolean} placeholder="Type 'Th', then press Up / Down" showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill enableArrowNavigation={${value}} suggestions={suggestions} />`,
+  },
+  acceptOnEnter: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} acceptOnEnter={value as boolean} placeholder="Type 'Thanks', then Enter" showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill acceptOnEnter={${value}} suggestions={suggestions} />`,
+  },
+  commitOnBlur: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => <CommitOnBlurDemo enabled={value as boolean} />,
+    code: (value) => `<ForeFill commitOnBlur={${value}} onCommit={save} suggestions={suggestions} />`,
+  },
+  partialAccept: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} partialAccept={value as boolean} showHelper placeholder="Type 'Let', then Ctrl / Cmd + →" />
+    ),
+    code: (value) => `<ForeFill partialAccept={${value}} suggestions={suggestions} />`,
+  },
+
+  // ----- Helper -------------------------------------------------------------
+  showHelper: {
+    control: { kind: 'select', options: ['idle', 'true', 'false'], default: 'idle' },
+    render: (value) => (
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        showHelper={value === 'true' ? true : value === 'false' ? false : 'idle'}
+        placeholder="Type 'Thanks'"
+      />
+    ),
+    code: (value) =>
+      value === 'idle'
+        ? `<ForeFill showHelper="idle" suggestions={suggestions} />`
+        : `<ForeFill showHelper={${value}} suggestions={suggestions} />`,
+  },
+  helperIdleMs: {
+    control: { kind: 'number', default: 900, min: 0, max: 5000 },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} showHelper="idle" helperIdleMs={value as number} placeholder="Type, then pause" />
+    ),
+    code: (value) => `<ForeFill showHelper="idle" helperIdleMs={${value}} suggestions={suggestions} />`,
+  },
+  helperText: {
+    control: { kind: 'text', default: '↹ Tab to accept' },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} showHelper helperText={String(value)} placeholder="Type 'Thanks'" />
+    ),
+    code: (value) => `<ForeFill showHelper helperText="${value}" suggestions={suggestions} />`,
+  },
+
+  // ----- Status -------------------------------------------------------------
+  status: {
+    control: { kind: 'select', options: ['idle', 'loading', 'success', 'error'], default: 'success' },
+    render: (value) => (
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        status={value === 'idle' ? undefined : (value as 'loading' | 'success' | 'error')}
+        placeholder="Type 'Thanks'"
+        showHelper="idle"
+      />
+    ),
+    code: (value) =>
+      value === 'idle'
+        ? `<ForeFill suggestions={suggestions} />`
+        : `<ForeFill status="${value}" suggestions={suggestions} />`,
+  },
+
+  // ----- Appearance ---------------------------------------------------------
+  variant: {
+    control: { kind: 'select', options: ['outline', 'filled', 'underline'], default: 'filled' },
+    render: (value) => (
+      <ForeFill as="input" suggestions={DEFAULT_SUGGESTIONS} variant={value as ForeFillVariant} placeholder={`variant="${value}"`} showHelper={false} />
+    ),
+    code: (value) => `<ForeFill variant="${value}" suggestions={suggestions} />`,
+  },
+  size: {
+    control: { kind: 'select', options: ['sm', 'md', 'lg'], default: 'lg' },
+    render: (value) => (
+      <ForeFill as="input" suggestions={DEFAULT_SUGGESTIONS} size={value as ForeFillSize} placeholder={`size="${value}"`} showHelper={false} />
+    ),
+    code: (value) => `<ForeFill size="${value}" suggestions={suggestions} />`,
+  },
+  theme: {
+    control: { kind: 'select', options: ['light', 'dark'], default: 'dark' },
+    render: (value) => (
+      <div
+        data-theme={String(value)}
+        className={value === 'dark' ? 'rounded-xl bg-[#10131A] p-3' : 'rounded-xl border border-[#D7DEE9] bg-white p-3'}
+      >
+        <ForeFill suggestions={DEFAULT_SUGGESTIONS} theme={value as 'light' | 'dark'} placeholder="Type 'Thanks'" showHelper="idle" />
+      </div>
+    ),
+    code: (value) => `<ForeFill theme="${value}" suggestions={suggestions} />`,
+  },
+  disabled: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} disabled={value as boolean} defaultValue="You can't edit this when disabled" />
+    ),
+    code: (value) => `<ForeFill disabled={${value}} defaultValue="…" />`,
+  },
+
+  // ----- Events -------------------------------------------------------------
+  onChange: {
+    render: () => <EventReadoutDemo event="onChange" />,
+    code: () => `<ForeFill onChange={(value) => console.log(value)} suggestions={suggestions} />`,
+  },
+  onCommit: {
+    render: () => <EventReadoutDemo event="onCommit" />,
+    code: () => `<ForeFill onCommit={(value) => save(value)} suggestions={suggestions} />`,
+  },
+  onAccept: {
+    render: () => <EventReadoutDemo event="onAccept" />,
+    code: () => `<ForeFill
+  onAccept={(value, suggestion) => track(suggestion)}
+  suggestions={suggestions}
+/>`,
+  },
+  onDismiss: {
+    render: () => <EventReadoutDemo event="onDismiss" />,
+    code: () => `<ForeFill onDismiss={() => track('dismissed')} suggestions={suggestions} />`,
+  },
+
+  // ----- Form & native ------------------------------------------------------
+  name: {
+    control: { kind: 'text', default: 'reply' },
+    render: (value) => (
+      <ForeFill as="input" name={String(value)} suggestions={DEFAULT_SUGGESTIONS} placeholder={`Submitted as '${value}'`} showHelper={false} />
+    ),
+    code: (value) => `<ForeFill as="input" name="${value}" />`,
+  },
+  id: {
+    control: { kind: 'text', default: 'reply-field' },
+    render: (value) => (
+      <div className="space-y-1.5">
+        <label htmlFor={String(value)} className="block text-xs font-bold text-[#526078] dark:text-[#A8B3C7]">
+          Reply
+        </label>
+        <ForeFill as="input" id={String(value)} suggestions={DEFAULT_SUGGESTIONS} placeholder="Paired with a <label htmlFor>" showHelper={false} />
+      </div>
+    ),
+    code: (value) => `<label htmlFor="${value}">Reply</label>
+<ForeFill as="input" id="${value}" />`,
+  },
+  required: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => (
+      <ForeFill as="input" required={value as boolean} suggestions={DEFAULT_SUGGESTIONS} placeholder="Required field" showHelper={false} />
+    ),
+    code: (value) => `<ForeFill as="input" required={${value}} />`,
+  },
+  readOnly: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => (
+      <ForeFill readOnly={value as boolean} suggestions={DEFAULT_SUGGESTIONS} defaultValue="Saved reply — toggle readOnly to edit" />
+    ),
+    code: (value) => `<ForeFill readOnly={${value}} value="Saved reply" />`,
+  },
+  maxLength: {
+    control: { kind: 'number', default: 20, min: 1, max: 200 },
+    render: (value) => (
+      <ForeFill as="input" maxLength={value as number} suggestions={DEFAULT_SUGGESTIONS} placeholder={`Stops at ${value} characters`} showHelper={false} />
+    ),
+    code: (value) => `<ForeFill as="input" maxLength={${value}} />`,
+  },
+  autoFocus: {
+    control: { kind: 'boolean', default: false },
+    render: (value) => (
+      <ForeFill key={String(value)} as="input" autoFocus={value as boolean} suggestions={DEFAULT_SUGGESTIONS} placeholder="Toggle true to focus on mount" showHelper={false} />
+    ),
+    code: (value) => `<ForeFill as="input" autoFocus={${value}} />`,
+  },
+
+  // ----- Styling hooks ------------------------------------------------------
+  className: {
+    control: { kind: 'text', default: '[--ff-accent:#0e9f6e]' },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} className={String(value)} placeholder="Type 'Thanks'" showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill className="${value}" suggestions={suggestions} />`,
+  },
+  editorClassName: {
+    control: { kind: 'text', default: 'font-mono' },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} editorClassName={String(value)} placeholder="Type 'Thanks'" showHelper="idle" />
+    ),
+    code: (value) => `<ForeFill editorClassName="${value}" suggestions={suggestions} />`,
+  },
+  helperClassName: {
+    control: { kind: 'text', default: 'uppercase tracking-wide' },
+    render: (value) => (
+      <ForeFill suggestions={DEFAULT_SUGGESTIONS} showHelper helperClassName={String(value)} placeholder="Type 'Thanks'" />
+    ),
+    code: (value) => `<ForeFill showHelper helperClassName="${value}" suggestions={suggestions} />`,
+  },
+  ariaLabel: {
+    control: { kind: 'text', default: 'Compose reply' },
+    render: (value) => (
+      <ForeFill as="input" ariaLabel={String(value)} suggestions={DEFAULT_SUGGESTIONS} placeholder="Inspect the field's aria-label" showHelper={false} />
+    ),
+    code: (value) => `<ForeFill as="input" ariaLabel="${value}" />`,
+  },
+};
+
+function DemoReadout({ label, value }: { label: string; value: string }) {
   return (
-    <main id="documentation" className="mx-auto flex w-full max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:px-8">
-      <aside className="hidden w-56 shrink-0 lg:block">
-        <nav className="sticky top-24 space-y-1 border-l border-[#D7DEE9] pl-4 dark:border-white/10">
-          <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#708096] dark:text-[#A8B3C7]">
+    <div className="flex items-center gap-2 rounded-lg border border-[#D7DEE9] bg-[#F7F8FB] px-3 py-2 text-xs dark:border-white/10 dark:bg-white/5">
+      <span className="shrink-0 font-mono font-bold text-[#6F84B2] dark:text-[#A2B2D2]">{label}</span>
+      <span className="truncate font-medium text-[#33415C] dark:text-[#CAD3E3]">{value}</span>
+    </div>
+  );
+}
+
+function ControlledValueDemo() {
+  const [value, setValue] = useState('');
+  return (
+    <div className="space-y-2">
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        value={value}
+        onChange={setValue}
+        placeholder="Controlled — type 'Thanks'"
+        showHelper="idle"
+      />
+      <DemoReadout label="value" value={value || '(empty)'} />
+    </div>
+  );
+}
+
+function AsyncDemo({ debounceMs = 250 }: { debounceMs?: number }) {
+  const fetchSuggestions = useCallback(async (query: string) => {
+    await new Promise((resolve) => window.setTimeout(resolve, 350));
+    return DEFAULT_SUGGESTIONS.filter((item) =>
+      item.toLowerCase().includes(query.toLowerCase())
+    );
+  }, []);
+  return (
+    <ForeFill
+      asyncSuggestions={fetchSuggestions}
+      debounceMs={debounceMs}
+      placeholder="Type 'help' — fetched after a short delay"
+      showHelper="idle"
+    />
+  );
+}
+
+function CommitOnBlurDemo({ enabled }: { enabled: boolean }) {
+  const [committed, setCommitted] = useState('(blur the field to commit)');
+  return (
+    <div className="space-y-2">
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        commitOnBlur={enabled}
+        onCommit={(value) => setCommitted(value || '(empty)')}
+        placeholder="Type, then click away"
+        showHelper="idle"
+      />
+      <DemoReadout label="committed on blur" value={committed} />
+    </div>
+  );
+}
+
+function EventReadoutDemo({ event }: { event: DemoEvent }) {
+  const [last, setLast] = useState('(nothing yet)');
+  return (
+    <div className="space-y-2">
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        placeholder="Type 'Thanks', then Tab / Enter / Esc"
+        showHelper="idle"
+        onChange={event === 'onChange' ? (value) => setLast(value || '(empty)') : undefined}
+        onCommit={event === 'onCommit' ? (value) => setLast(`committed: ${value || '(empty)'}`) : undefined}
+        onAccept={event === 'onAccept' ? (_value, suggestion) => setLast(`accepted: ${suggestion}`) : undefined}
+        onDismiss={event === 'onDismiss' ? () => setLast('dismissed with Esc') : undefined}
+      />
+      <DemoReadout label={event} value={last} />
+    </div>
+  );
+}
+
+function Badge({ children, tone = 'type' }: { children: ReactNode; tone?: 'type' | 'muted' }) {
+  return (
+    <span
+      className={`rounded-md px-2 py-0.5 font-mono text-[11px] ${
+        tone === 'type'
+          ? 'bg-[#EEF2F8] text-[#33415C] dark:bg-[#6F84B2]/20 dark:text-[#A2B2D2]'
+          : 'border border-[#D7DEE9] text-[#708096] dark:border-white/10 dark:text-[#A8B3C7]'
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function ExampleCard({
+  children,
+  code,
+  filename = 'App.tsx',
+}: {
+  children: ReactNode;
+  code: string;
+  filename?: string;
+}) {
+  const [tab, setTab] = useState<'preview' | 'code'>('preview');
+  return (
+    <div className="overflow-hidden rounded-xl border border-[#D7DEE9] bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
+      <div
+        role="tablist"
+        aria-label="Example view"
+        className="flex items-center gap-1 border-b border-[#E6EBF2] bg-[#F8FAFD] px-2 py-1.5 dark:border-white/10 dark:bg-white/[0.03]"
+      >
+        {(['preview', 'code'] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={tab === value ? 'true' : 'false'}
+            onClick={() => setTab(value)}
+            className={`rounded-md px-3 py-1 text-xs font-bold capitalize transition ${
+              tab === value
+                ? 'bg-white text-[#07154D] shadow-sm dark:bg-white/10 dark:text-white'
+                : 'text-[#708096] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:text-white'
+            }`}
+          >
+            {value}
+          </button>
+        ))}
+        {tab === 'preview' && (
+          <span className="ml-auto pr-1 text-[10px] font-bold uppercase tracking-wider text-[#9AA7BC] dark:text-[#7C8AA3]">
+            Type to try ⌨
+          </span>
+        )}
+      </div>
+      {tab === 'preview' ? <div className="p-4">{children}</div> : <CodeBlock code={code} filename={filename} compact />}
+    </div>
+  );
+}
+
+function PropControlBar({
+  name,
+  control,
+  value,
+  onChange,
+}: {
+  name: string;
+  control: PropControl;
+  value: DemoValue;
+  onChange: (value: DemoValue) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-[#C9D3E1] bg-[#F8FAFD] px-3 py-2 dark:border-white/15 dark:bg-white/[0.03]">
+      <span className="font-mono text-xs font-bold text-[#6F84B2] dark:text-[#A2B2D2]">{name}</span>
+      <span className="text-sm text-[#9AA7BC]">=</span>
+      <div className="min-w-[7rem] flex-1">
+        {control.kind === 'boolean' && (
+          <Toggle checked={value as boolean} onChange={onChange} labels={['true', 'false']} />
+        )}
+        {control.kind === 'select' && (
+          <Select value={String(value)} onChange={onChange} options={control.options} />
+        )}
+        {control.kind === 'number' && (
+          <NumberInput value={value as number} min={control.min} max={control.max} onChange={onChange} />
+        )}
+        {control.kind === 'text' && <TextInput value={String(value)} onChange={onChange} />}
+      </div>
+    </div>
+  );
+}
+
+function PropSubsection({ name }: { name: string }) {
+  const demo = PROP_DEMOS[name];
+  const [value, setValue] = useState<DemoValue>(() => demo?.control?.default ?? '');
+  const prop = PROP_BY_NAME[name];
+  if (!prop || !demo) return null;
+  return (
+    <div id={name} className="scroll-mt-24 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="font-mono text-lg font-extrabold text-[#07154D] dark:text-white">{name}</h3>
+        <Badge>{prop.type}</Badge>
+        <Badge tone="muted">default: {prop.def}</Badge>
+      </div>
+      <p className="text-sm leading-6">
+        <span className="font-semibold text-[#33415C] dark:text-[#CAD3E3]">{prop.desc}</span>{' '}
+        {prop.purpose}
+      </p>
+      <ExampleCard code={demo.code(value)}>
+        <div className="space-y-3">
+          {demo.control && (
+            <PropControlBar name={name} control={demo.control} value={value} onChange={setValue} />
+          )}
+          {demo.render(value)}
+        </div>
+      </ExampleCard>
+    </div>
+  );
+}
+
+function PropCategory({ category }: { category: DocCategory }) {
+  return (
+    <DocSection id={category.id} title={category.label} icon={category.icon}>
+      <p>{category.blurb}</p>
+      <div className="space-y-10 pt-2">
+        {category.props.map((name) => (
+          <PropSubsection key={name} name={name} />
+        ))}
+      </div>
+    </DocSection>
+  );
+}
+
+function DocNavLink({ href, children, mono }: { href: string; children: ReactNode; mono?: boolean }) {
+  return (
+    <a
+      href={href}
+      className={`block rounded-md px-2 py-1 text-[#526078] transition hover:bg-[#EEF2F7] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:bg-white/10 dark:hover:text-white ${
+        mono ? 'font-mono text-[13px]' : 'text-sm font-semibold'
+      }`}
+    >
+      {children}
+    </a>
+  );
+}
+
+function DocNavGroup({ title, href, children }: { title: string; href?: string; children: ReactNode }) {
+  return (
+    <div>
+      {href ? (
+        <a
+          href={href}
+          className="mb-1 block text-xs font-bold uppercase tracking-wider text-[#708096] transition hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:text-white"
+        >
+          {title}
+        </a>
+      ) : (
+        <p className="mb-1 text-xs font-bold uppercase tracking-wider text-[#708096] dark:text-[#A8B3C7]">
+          {title}
+        </p>
+      )}
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  );
+}
+
+function DocSidebar() {
+  return (
+    <aside className="hidden w-60 shrink-0 lg:block">
+      <nav className="sticky top-24 max-h-[calc(100vh-7rem)] space-y-5 overflow-y-auto border-l border-[#D7DEE9] pb-8 pl-4 pr-1 dark:border-white/10">
+        <DocNavGroup title="Guides">
+          {GUIDE_SECTIONS.map((section) => (
+            <DocNavLink key={section.id} href={`#${section.id}`}>
+              {section.label}
+            </DocNavLink>
+          ))}
+        </DocNavGroup>
+        {DOC_CATEGORIES.map((category) => (
+          <DocNavGroup key={category.id} title={category.label} href={`#${category.id}`}>
+            {category.props.map((name) => (
+              <DocNavLink key={name} href={`#${name}`} mono>
+                {name}
+              </DocNavLink>
+            ))}
+          </DocNavGroup>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
+function DocumentationPage({ theme }: { theme: ThemeMode }) {
+  return (
+    <main
+      id="documentation"
+      data-theme={theme}
+      className="mx-auto flex w-full max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:px-8"
+    >
+      <DocSidebar />
+
+      <div className="min-w-0 flex-1 space-y-14">
+        <header className="space-y-2">
+          <p className="text-sm font-black uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
             Documentation
           </p>
-          {DOC_LINKS.map((link) => (
-            <a
-              key={link.id}
-              href={`#${link.id}`}
-              className="block rounded-md px-3 py-1.5 text-sm font-semibold text-[#526078] transition hover:bg-[#EEF2F7] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:bg-white/10 dark:hover:text-white"
-            >
-              {link.label}
-            </a>
-          ))}
-        </nav>
-      </aside>
-
-      <div className="min-w-0 flex-1 space-y-12">
-        <DocSection id="installation" title="Installation" icon={<Clipboard />}>
+          <h1 className="text-3xl font-black tracking-tight text-[#07154D] dark:text-white sm:text-4xl">
+            Every prop, with a field you can type in
+          </h1>
+          <p className="max-w-2xl leading-7 text-[#526078] dark:text-[#A8B3C7]">
+            Each example below is live. Type into it to feel the behavior, then flip to the
+            Code tab to copy the exact snippet.
+          </p>
+        </header>
+        <DocSection id="installation" title="Installation" icon={<Clipboard className="h-5 w-5" />}>
           <p>Install the package and import its stylesheet once in your app.</p>
           <CodeBlock code={`npm install ${PKG}`} filename="terminal" />
           <CodeBlock
@@ -978,36 +1649,36 @@ import '${PKG}/styles.css';`}
           />
         </DocSection>
 
-        <DocSection id="quick-start" title="Quick Start" icon={<Sparkles />}>
-          <p>Pass a list of phrases and handle the committed value.</p>
-          <CodeBlock
+        <DocSection id="quick-start" title="Quick start" icon={<Sparkles className="h-5 w-5" />}>
+          <p>
+            Pass a list of phrases and handle the committed value. Type a few letters below,
+            then accept the hint with Tab or Enter.
+          </p>
+          <ExampleCard
             filename="ReplyBox.tsx"
             code={`const replies = [
   'Thanks so much for reaching out!',
-  'Happy to help - let me take a look.',
+  'Happy to help — let me take a look.',
   'Let me know if you have any questions.',
 ];
 
-export function ReplyBox() {
-  return (
-    <ForeFill
-      suggestions={replies}
-      placeholder="Write a reply..."
-      showHelper="idle"
-      onCommit={(value) => console.log(value)}
-    />
-  );
-}`}
-          />
+<ForeFill
+  suggestions={replies}
+  placeholder="Write a reply..."
+  showHelper="idle"
+  onCommit={(value) => console.log(value)}
+/>`}
+          >
+            <ForeFill suggestions={DEFAULT_SUGGESTIONS} placeholder="Write a reply..." showHelper="idle" />
+          </ExampleCard>
         </DocSection>
 
-        <DocSection id="trigger-suggestions" title="Trigger Suggestions" icon={<WandSparkles />}>
+        <DocSection id="trigger-suggestions" title="Trigger suggestions" icon={<WandSparkles className="h-5 w-5" />}>
           <p>
-            Configure any symbol or word as a trigger. Trigger suggestions use
-            startsWith matching, keep the trigger text, and replace only the typed query
-            after it.
+            Configure any symbol or word as a trigger. Trigger suggestions use startsWith
+            matching, keep the trigger text, and replace only the typed query after it.
           </p>
-          <CodeBlock
+          <ExampleCard
             filename="Triggers.tsx"
             code={`<ForeFill
   as="input"
@@ -1017,30 +1688,44 @@ export function ReplyBox() {
     { trigger: 'Happy', suggestions: [' Birthday!'] },
   ]}
 />`}
-          />
+          >
+            <ForeFill
+              as="input"
+              triggerSuggestions={TRIGGER_PRESETS.all}
+              placeholder="Type @g, $t, & sh, or Happy"
+              showHelper="idle"
+            />
+          </ExampleCard>
         </DocSection>
 
-        <DocSection id="existing-values" title="Existing Values" icon={<Zap />}>
+        <DocSection id="existing-values" title="Existing values" icon={<Zap className="h-5 w-5" />}>
           <p>
-            When a field starts with text, ForeFill treats newly appended text as the
-            active query. Accepting a normal suggestion replaces that active segment and
-            preserves the existing prefix.
+            When a field starts with text, ForeFill treats newly appended text as the active
+            query. Accepting a normal suggestion replaces that active segment and preserves
+            the existing prefix.
           </p>
-          <CodeBlock
+          <ExampleCard
             filename="ExistingValue.tsx"
             code={`<ForeFill
-  defaultValue="Happy to help - let me take a look. "
+  defaultValue="Happy to help — let me take a look. "
   suggestions={['Thanks so much for reaching out!']}
 />`}
-          />
+          >
+            <ForeFill
+              defaultValue="Happy to help — let me take a look. "
+              suggestions={DEFAULT_SUGGESTIONS}
+              placeholder="Type 'Thanks' after the saved text"
+              showHelper="idle"
+            />
+          </ExampleCard>
         </DocSection>
 
-        <DocSection id="async-suggestions" title="Async Suggestions" icon={<Code2 />}>
+        <DocSection id="async-suggestions" title="Async suggestions" icon={<Code2 className="h-5 w-5" />}>
           <p>
-            Async fetchers receive the active query, including appended text after an
-            existing value. Use debounceMs to limit requests.
+            Async fetchers receive the active query, including appended text after an existing
+            value. Use debounceMs to limit requests; a progress bar shows while loading.
           </p>
-          <CodeBlock
+          <ExampleCard
             filename="Async.tsx"
             code={`<ForeFill
   debounceMs={250}
@@ -1049,23 +1734,42 @@ export function ReplyBox() {
     return res.json();
   }}
 />`}
-          />
+          >
+            <AsyncDemo debounceMs={250} />
+          </ExampleCard>
         </DocSection>
 
-        <DocSection id="surfaces" title="Surfaces" icon={<SlidersHorizontal />}>
-          <p>Use the same completion behavior in textarea, input/textbox, and richtext surfaces.</p>
-          <CodeBlock
+        <DocSection id="surfaces" title="Surfaces" icon={<SlidersHorizontal className="h-5 w-5" />}>
+          <p>The same completion behavior works in textarea, input, and richtext surfaces.</p>
+          <ExampleCard
             code={`<ForeFill as="textarea" suggestions={data} />
 <ForeFill as="input" suggestions={data} />
 <ForeFill as="richtext" suggestions={data} />`}
-          />
+          >
+            <div className="space-y-3">
+              <ForeFill as="textarea" rows={2} suggestions={DEFAULT_SUGGESTIONS} placeholder="textarea — type 'Thanks'" showHelper={false} />
+              <ForeFill as="input" suggestions={DEFAULT_SUGGESTIONS} placeholder="input — type 'Thanks'" showHelper={false} />
+              <ForeFill as="richtext" suggestions={DEFAULT_SUGGESTIONS} placeholder="richtext — type 'Thanks'" showHelper={false} />
+            </div>
+          </ExampleCard>
         </DocSection>
 
-        <DocSection id="styling" title="Styling" icon={<Sun />}>
+        <DocSection id="styling" title="Styling" icon={<Sun className="h-5 w-5" />}>
           <p>
-            Pick a variant and size, or override CSS variables through className. The
-            library stylesheet is plain CSS.
+            Pick a variant and size, or override CSS variables through className. The library
+            stylesheet is plain CSS.
           </p>
+          <ExampleCard
+            code={`/* Override design tokens on the root via className */
+<ForeFill className="[--ff-accent:#2e7d73]" />`}
+          >
+            <ForeFill
+              suggestions={DEFAULT_SUGGESTIONS}
+              className="[--ff-accent:#2e7d73]"
+              placeholder="Custom accent — type 'Thanks'"
+              showHelper="idle"
+            />
+          </ExampleCard>
           <CodeBlock
             filename="theme.css"
             code={`.my-forefill {
@@ -1076,13 +1780,13 @@ export function ReplyBox() {
           />
         </DocSection>
 
-        <DocSection id="accessibility" title="Accessibility" icon={<Check />}>
+        <DocSection id="accessibility" title="Accessibility" icon={<Check className="h-5 w-5" />}>
           <ul className="grid gap-3 sm:grid-cols-2">
             {[
               'aria-autocomplete is inline.',
               'Loading and active hints are announced politely.',
               'Escape dismisses visible hints.',
-              'Read-only and invalid states are reflected with ARIA.',
+              'Read-only and error states are reflected with ARIA.',
             ].map((item) => (
               <li key={item} className="rounded-md border border-[#D7DEE9] bg-white p-3 text-sm dark:border-white/10 dark:bg-white/5">
                 {item}
@@ -1090,6 +1794,22 @@ export function ReplyBox() {
             ))}
           </ul>
         </DocSection>
+
+        <div className="border-t border-[#E6EBF2] pt-10 dark:border-white/10">
+          <p className="text-sm font-black uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
+            API reference
+          </p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-[#07154D] dark:text-white">
+            All {API_PROPS.length} props, grouped and live
+          </h2>
+          <p className="mt-2 max-w-2xl text-[#526078] dark:text-[#A8B3C7]">
+            Every prop below has its own typeable example. Use the sidebar to jump straight to one.
+          </p>
+        </div>
+
+        {DOC_CATEGORIES.map((category) => (
+          <PropCategory key={category.id} category={category} />
+        ))}
       </div>
     </main>
   );
@@ -1124,7 +1844,6 @@ function Playground({ theme }: { theme: ThemeMode }) {
     triggerMode: 'all',
     disableInlineFill: false,
     enableArrowNavigation: true,
-    previewActive: false,
     acceptOnEnter: true,
     commitOnBlur: false,
     partialAccept: true,
@@ -1132,17 +1851,12 @@ function Playground({ theme }: { theme: ThemeMode }) {
     helperIdleMs: 900,
     helperText: '',
     status: 'idle',
-    statusMessage: '',
-    invalid: false,
     name: '',
     id: '',
     required: false,
     readOnly: false,
     maxLength: 0,
-    form: '',
     autoFocus: false,
-    autoComplete: 'off',
-    spellCheck: false,
     disabled: false,
   });
 
@@ -1200,7 +1914,6 @@ function Playground({ theme }: { theme: ThemeMode }) {
             debounceMs={s.debounceMs}
             disableInlineFill={s.disableInlineFill}
             enableArrowNavigation={s.enableArrowNavigation}
-            previewActive={s.previewActive}
             acceptOnEnter={s.acceptOnEnter}
             commitOnBlur={s.commitOnBlur}
             partialAccept={s.partialAccept}
@@ -1214,8 +1927,6 @@ function Playground({ theme }: { theme: ThemeMode }) {
             helperIdleMs={s.helperIdleMs}
             helperText={s.helperText || undefined}
             status={s.status === 'idle' ? undefined : s.status}
-            statusMessage={s.statusMessage || undefined}
-            invalid={s.invalid}
             placeholder={s.placeholder}
             rows={s.rows}
             inputType={s.inputType}
@@ -1225,10 +1936,7 @@ function Playground({ theme }: { theme: ThemeMode }) {
             required={s.required}
             readOnly={s.readOnly}
             maxLength={s.maxLength > 0 ? s.maxLength : undefined}
-            form={s.form || undefined}
             autoFocus={s.autoFocus}
-            autoComplete={s.autoComplete}
-            spellCheck={s.spellCheck}
             disabled={s.disabled}
             theme={s.themeChoice === 'auto' ? theme : s.themeChoice}
             onCommit={(value) => {
@@ -1255,7 +1963,7 @@ function Playground({ theme }: { theme: ThemeMode }) {
         <div className="space-y-7">
           <ControlGroup title="Surface">
             <Control name="as" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.as} onChange={(value) => set('as', value as ForeFillSurface)} options={['textarea', 'input', 'textbox', 'richtext']} />
+              <Select value={s.as} onChange={(value) => set('as', value as ForeFillSurface)} options={['textarea', 'input', 'richtext']} />
             </Control>
             <Control name="rows" openHelp={openHelp} setOpenHelp={setOpenHelp}>
               <NumberInput value={s.rows} min={1} max={12} onChange={(value) => set('rows', Math.max(1, value))} />
@@ -1299,7 +2007,6 @@ function Playground({ theme }: { theme: ThemeMode }) {
             {[
               ['disableInlineFill', s.disableInlineFill, (value: boolean) => set('disableInlineFill', value)],
               ['enableArrowNavigation', s.enableArrowNavigation, (value: boolean) => set('enableArrowNavigation', value)],
-              ['previewActive', s.previewActive, (value: boolean) => set('previewActive', value)],
               ['acceptOnEnter', s.acceptOnEnter, (value: boolean) => set('acceptOnEnter', value)],
               ['commitOnBlur', s.commitOnBlur, (value: boolean) => set('commitOnBlur', value)],
               ['partialAccept', s.partialAccept, (value: boolean) => set('partialAccept', value)],
@@ -1323,12 +2030,6 @@ function Playground({ theme }: { theme: ThemeMode }) {
             <Control name="status" openHelp={openHelp} setOpenHelp={setOpenHelp}>
               <Select value={s.status} onChange={(value) => set('status', value as StatusMode)} options={['idle', 'loading', 'success', 'error']} />
             </Control>
-            <Control name="statusMessage" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <TextInput value={s.statusMessage} onChange={(value) => set('statusMessage', value)} />
-            </Control>
-            <Control name="invalid" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Toggle checked={s.invalid} onChange={(value) => set('invalid', value)} labels={['on', 'off']} />
-            </Control>
           </ControlGroup>
 
           <ControlGroup title="Appearance and Form">
@@ -1350,17 +2051,10 @@ function Playground({ theme }: { theme: ThemeMode }) {
             <Control name="maxLength" openHelp={openHelp} setOpenHelp={setOpenHelp}>
               <NumberInput value={s.maxLength} min={0} max={1000} onChange={(value) => set('maxLength', Math.max(0, value))} />
             </Control>
-            <Control name="form" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <TextInput value={s.form} onChange={(value) => set('form', value)} />
-            </Control>
-            <Control name="autoComplete" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <TextInput value={s.autoComplete} onChange={(value) => set('autoComplete', value)} />
-            </Control>
             {[
               ['required', s.required, (value: boolean) => set('required', value)],
               ['readOnly', s.readOnly, (value: boolean) => set('readOnly', value)],
               ['autoFocus', s.autoFocus, (value: boolean) => set('autoFocus', value)],
-              ['spellCheck', s.spellCheck, (value: boolean) => set('spellCheck', value)],
               ['disabled', s.disabled, (value: boolean) => set('disabled', value)],
             ].map(([name, checked, onChange]) => (
               <Control key={name as string} name={name as string} openHelp={openHelp} setOpenHelp={setOpenHelp}>
@@ -1379,7 +2073,7 @@ function Playground({ theme }: { theme: ThemeMode }) {
                 <th className="py-3 pr-4 font-bold">Prop</th>
                 <th className="py-3 pr-4 font-bold">Type</th>
                 <th className="py-3 pr-4 font-bold">Default</th>
-                <th className="py-3 font-bold">Purpose</th>
+                <th className="py-3 font-bold">Use and example</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E6EBF2] dark:divide-white/10">
@@ -1394,7 +2088,13 @@ function Playground({ theme }: { theme: ThemeMode }) {
                   <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs text-[#526078] dark:text-[#A8B3C7]">
                     {prop.def}
                   </td>
-                  <td className="py-3 text-[#33415C] dark:text-[#CAD3E3]">{prop.desc}</td>
+                  <td className="py-3 text-[#33415C] dark:text-[#CAD3E3]">
+                    <p className="font-medium text-[#1F2A44] dark:text-white">{prop.desc}</p>
+                    <p className="mt-1 text-xs leading-5 text-[#526078] dark:text-[#A8B3C7]">{prop.purpose}</p>
+                    <code className="mt-2 block max-w-[28rem] overflow-x-auto rounded-md border border-[#D7DEE9] bg-[#F8FAFD] px-2 py-1.5 font-mono text-[11px] text-[#07154D] dark:border-white/10 dark:bg-white/5 dark:text-[#DDE6F6]">
+                      {prop.example}
+                    </code>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1424,7 +2124,7 @@ function buildForeFillCode(
   if (s.as !== 'textarea') str('as', s.as);
   if (s.placeholder) str('placeholder', s.placeholder);
   if (s.as === 'textarea' && s.rows !== 3) raw('rows', String(s.rows));
-  if ((s.as === 'input' || s.as === 'textbox') && s.inputType !== 'text') str('inputType', s.inputType);
+  if (s.as === 'input' && s.inputType !== 'text') str('inputType', s.inputType);
   if (s.ariaLabel) str('ariaLabel', s.ariaLabel);
   if (s.variant !== 'outline') str('variant', s.variant);
   if (s.size !== 'md') str('size', s.size);
@@ -1434,7 +2134,6 @@ function buildForeFillCode(
   if (s.debounceMs !== 0) raw('debounceMs', String(s.debounceMs));
   if (s.disableInlineFill) flag('disableInlineFill');
   if (!s.enableArrowNavigation) raw('enableArrowNavigation', 'false');
-  if (s.previewActive) flag('previewActive');
   if (!s.acceptOnEnter) raw('acceptOnEnter', 'false');
   if (s.commitOnBlur) flag('commitOnBlur');
   if (!s.partialAccept) raw('partialAccept', 'false');
@@ -1443,17 +2142,12 @@ function buildForeFillCode(
   if (s.helperIdleMs !== 900) raw('helperIdleMs', String(s.helperIdleMs));
   if (s.helperText) str('helperText', s.helperText);
   if (s.status !== 'idle') str('status', s.status);
-  if (s.statusMessage) str('statusMessage', s.statusMessage);
-  if (s.invalid) flag('invalid');
   if (s.name) str('name', s.name);
   if (s.id) str('id', s.id);
   if (s.required) flag('required');
   if (s.readOnly) flag('readOnly');
   if (s.maxLength > 0) raw('maxLength', String(s.maxLength));
-  if (s.form) str('form', s.form);
   if (s.autoFocus) flag('autoFocus');
-  if (s.autoComplete !== 'off') str('autoComplete', s.autoComplete);
-  if (s.spellCheck) flag('spellCheck');
   if (s.disabled) flag('disabled');
   lines.push('  onCommit={(value) => setValue(value)}');
 
@@ -1596,6 +2290,9 @@ function HelpTip({
         <span className="absolute left-6 top-0 z-20 w-72 rounded-md border border-[#D7DEE9] bg-white p-3 text-left text-xs leading-5 text-[#33415C] shadow-lg dark:border-white/10 dark:bg-[#151923] dark:text-[#CAD3E3]">
           <strong className="mb-1 block text-[#07154D] dark:text-white">{prop.name}</strong>
           {prop.purpose}
+          <code className="mt-2 block rounded border border-[#D7DEE9] bg-[#F8FAFD] px-2 py-1.5 font-mono text-[11px] text-[#07154D] dark:border-white/10 dark:bg-white/5 dark:text-[#DDE6F6]">
+            {prop.example}
+          </code>
           <span className="mt-2 block font-mono text-[11px] text-[#708096] dark:text-[#A8B3C7]">
             Default: {prop.def}
           </span>

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Inline ghost-text autocomplete for React textareas, textboxes, and contenteditable richtext surfaces.
+  Inline ghost-text autocomplete for React textareas, inputs, and contenteditable richtext surfaces.
 </p>
 
 <p align="center">
@@ -17,14 +17,14 @@
 
 ## Overview
 
-**ForeFill** (`forefill`) is a small React component that shows a ghost suggestion directly inside a textarea, textbox, or contenteditable richtext surface — the user keeps typing and the rest fills in ahead of the caret.
+**ForeFill** (`forefill`) is a small React component that shows a ghost suggestion directly inside a textarea, input, or contenteditable richtext surface — the user keeps typing and the rest fills in ahead of the caret.
 
 It is designed for forms where users should keep typing naturally, then accept a suggestion with `Tab` or `Enter`.
 
 | Capability | Included |
 | --- | --- |
 | Inline ghost hint | Yes |
-| Textarea, textbox, and richtext surfaces | Yes |
+| Textarea, input, and richtext surfaces | Yes |
 | Prefix matching | Yes |
 | Substring matching | Yes |
 | Custom trigger suggestions | Yes |
@@ -135,19 +135,14 @@ Best for multiline notes.
 />
 ```
 
-### Textbox
+### Input
 
-Best for single-line fields. `as="textbox"` is an alias for `as="input"`.
+Best for single-line fields.
 
 ```tsx
 <ForeFill
   as="input"
   inputType="text"
-  suggestions={suggestions}
-/>
-
-<ForeFill
-  as="textbox"
   suggestions={suggestions}
 />
 ```
@@ -294,7 +289,6 @@ Style the helper:
   suggestions={suggestions}
   showHelper={true}
   helperClassName="reply-helper"
-  helperKeyClassName="reply-helper-key"
 />
 ```
 
@@ -315,16 +309,6 @@ Style the helper:
 .reply-helper kbd {
   border-color: #94a3b8;
 }
-```
-
-You can also pass inline styles:
-
-```tsx
-<ForeFill
-  suggestions={suggestions}
-  showHelper={true}
-  helperStyle={{ fontSize: '0.7em', opacity: 0.75 }}
-/>
 ```
 
 ## Match Modes
@@ -415,33 +399,24 @@ Use `asyncSuggestions` when suggestions come from an API. `debounceMs` delays th
 
 ## Validation And Status
 
-Drive the error, success, and loading treatments declaratively. `statusMessage`
-renders beneath the field and is announced to assistive tech.
+Drive the error, success, and loading treatments declaratively.
 
 ```tsx
-<ForeFill
-  invalid
-  statusMessage="That value is not recognized."
-/>
+<ForeFill status="error" />
 
-<ForeFill
-  status="success"
-  statusMessage="Looks good!"
-/>
+<ForeFill status="success" />
 ```
 
-`status` takes precedence over `invalid` and accepts `'idle' | 'loading' | 'success' | 'error'`.
+`status` accepts `'idle' | 'loading' | 'success' | 'error'`.
 `status="loading"` shows an indeterminate progress bar — this is also inferred
 automatically while an `asyncSuggestions` request is in flight, so async users
 get the bar for free.
 
 | Prop | Effect |
 | --- | --- |
-| `invalid` | Paints the error treatment and sets `aria-invalid`. Shorthand for `status="error"`. |
 | `status="error"` | Error border + ring, `aria-invalid`. |
 | `status="success"` | Success border + ring. |
 | `status="loading"` | Indeterminate progress bar, `aria-busy`. |
-| `statusMessage` | Visible message below the field, linked via `aria-describedby`. |
 
 ## Dark Mode
 
@@ -495,13 +470,13 @@ just like a plain field.
 ```
 
 Supported passthrough props: `name`, `id`, `required`, `readOnly`, `maxLength`,
-`form`, `autoFocus`, `autoComplete` (default `'off'`), and `spellCheck`
-(default `false`). The component's own value and handlers always take
-precedence, so these can't break its behavior. `readOnly` also suppresses the
-inline ghost.
+and `autoFocus`. The component's own value and handlers always take precedence,
+so these can't break its behavior. `readOnly` also suppresses the inline ghost.
+(Browser autofill and spellcheck are disabled internally so they never compete
+with the inline ghost.)
 
 > The `name`, `required`, and `maxLength` attributes apply to the `textarea` and
-> `input`/`textbox` surfaces. The `richtext` (contenteditable) surface is not a
+> `input` surfaces. The `richtext` (contenteditable) surface is not a
 > native form control, so it won't submit a value — use a hidden input mirror if
 > you need that.
 
@@ -645,7 +620,7 @@ in your own stylesheet to re-skin the component.
 | `--ff-border` | Resting border color |
 | `--ff-accent` | Focus border, caret, and ring color |
 | `--ff-success` | Success state color |
-| `--ff-danger` | Error / invalid state color |
+| `--ff-danger` | Error state color |
 | `--ff-radius` | Border radius |
 | `--ff-ease` | Animation easing curve |
 | `--ff-duration` | Base transition duration |
@@ -669,64 +644,116 @@ in your own stylesheet to re-skin the component.
 | `--ff-font-size` | Text size |
 | `--ff-line-height` | Text line height |
 | `--ff-min-height` | Minimum textarea/richtext height |
-| `--ff-input-min-height` | Textbox height |
+| `--ff-input-min-height` | Input height |
 
 ## Props
 
-| Prop | Type | Default | Description |
+Every public prop below includes its use and a short example.
+
+### Suggestions And Matching
+
+| Prop | Type / default | Use | Example |
 | --- | --- | --- | --- |
-| `as` | `'textarea' \| 'input' \| 'textbox' \| 'richtext'` | `'textarea'` | Editable surface to render. |
-| `suggestions` | `string[]` | `[]` | Static suggestions. |
-| `triggerSuggestions` | `ForeFillTriggerSuggestion[]` | `[]` | Triggered completions for symbols or words. Keeps the trigger and replaces only the query typed after it. |
-| `asyncSuggestions` | `(query: string) => Promise<string[]>` | - | Async suggestion source. Overrides `suggestions`. |
-| `onCommit` | `(value: string) => void` | - | Runs when the user accepts a hint or commits the current value. |
-| `onChange` | `(value: string) => void` | - | Runs on every typed change. |
-| `onAccept` | `(value: string, suggestion: string) => void` | - | Runs only when an inline suggestion is accepted, with the suggestion that was taken. |
-| `onDismiss` | `() => void` | - | Runs when a visible hint is dismissed with Escape. |
-| `placeholder` | `string` | `'Type to search...'` | Editable surface placeholder. |
-| `className` | `string` | - | Class for the root wrapper. |
-| `editorClassName` | `string` | - | Class for the editable surface. |
-| `textareaClassName` | `string` | - | Backward-compatible alias for the editable surface class. |
-| `inputType` | `string` | `'text'` | Input type when `as="input"` or `as="textbox"`. |
-| `helperClassName` | `string` | - | Class for the inline helper. |
-| `helperStyle` | `CSSProperties` | - | Inline styles for the helper wrapper. |
-| `helperKeyClassName` | `string` | - | Class for the built-in helper keycaps. |
-| `rows` | `number` | `3` | Textarea rows. Ignored by textbox and richtext modes. |
-| `disabled` | `boolean` | `false` | Disables the editable surface. |
-| `variant` | `'outline' \| 'filled' \| 'underline'` | `'outline'` | Visual style. |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | Size preset. |
-| `matchMode` | `'startsWith' \| 'substring'` | `'substring'` | Matching strategy. |
-| `disableInlineFill` | `boolean` | `false` | Disables ghost hints. |
-| `previewActive` | `boolean` | `false` | Render the ghost hint even when the surface is not focused. For autoplaying showcase/marketing demos driven programmatically; leave off for normal use. |
-| `enableArrowNavigation` | `boolean` | `true` | Lets `ArrowDown` and `ArrowUp` cycle matching inline hints. |
-| `minQueryLength` | `number` | `1` | Characters required before autosuggest activates. |
-| `debounceMs` | `number` | `0` | Async debounce delay in milliseconds. |
-| `ariaLabel` | `string` | placeholder | Textarea accessibility label. |
-| `showHelper` | `boolean \| 'idle'` | `false` | Shows the inline helper immediately, after idle, or never. |
-| `helperIdleMs` | `number` | `900` | Delay before showing the helper when `showHelper="idle"`. |
-| `helperText` | `ReactNode` | keycap helper | Custom inline helper content. |
-| `defaultValue` | `string` | `''` | Initial uncontrolled value. |
-| `value` | `string` | - | Controlled value. |
-| `invalid` | `boolean` | `false` | Error treatment + `aria-invalid`. Shorthand for `status="error"`. |
-| `status` | `'idle' \| 'loading' \| 'success' \| 'error'` | - | Explicit visual status. Overrides `invalid`. |
-| `statusMessage` | `ReactNode` | - | Message rendered beneath the field and announced to assistive tech. |
-| `theme` | `'light' \| 'dark'` | - | Force a color scheme. Omit to follow `prefers-color-scheme`. |
-| `name` | `string` | - | `name` forwarded to the input/textarea for form submission. |
-| `id` | `string` | - | `id` forwarded to the editable element (pairs with `<label htmlFor>`). |
-| `required` | `boolean` | `false` | Marks the field required (input/textarea); sets `aria-required`. |
-| `readOnly` | `boolean` | `false` | Renders the field read-only and suppresses the ghost. |
-| `maxLength` | `number` | - | Maximum character length (input/textarea). |
-| `form` | `string` | - | Associates the field with a `<form id>` elsewhere in the DOM. |
-| `autoFocus` | `boolean` | `false` | Autofocus the field on mount. |
-| `autoComplete` | `string` | `'off'` | `autocomplete` attribute. |
-| `spellCheck` | `boolean` | `false` | `spellcheck` attribute. |
-| `acceptOnEnter` | `boolean` | `true` | Whether Enter accepts a visible hint. When `false`, only Tab accepts. |
-| `commitOnBlur` | `boolean` | `false` | Commit the current value when focus leaves the field. |
-| `partialAccept` | `boolean` | `true` | Allow `Ctrl`/`Cmd` + `ArrowRight` to accept one word of the hint at a time. |
+| `suggestions` | `string[]`, default `[]` | Static suggestion list used when no trigger completion is active. | `<ForeFill suggestions={['Thanks so much!']} />` |
+| `triggerSuggestions` | `ForeFillTriggerSuggestion[]`, default `[]` | Adds trigger-specific completions for symbols or words, such as email domains after `@`. | `<ForeFill triggerSuggestions={[{ trigger: '@', suggestions: ['gmail.com'] }]} />` |
+| `asyncSuggestions` | `(query: string) => Promise<string[]>` | Loads suggestions from an API and takes precedence over `suggestions`. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={250} />` |
+| `matchMode` | `'startsWith' \| 'substring'`, default `'substring'` | Controls matching for normal suggestions; trigger suggestions always use starts-with matching. | `<ForeFill matchMode="startsWith" />` |
+| `minQueryLength` | `number`, default `1` | Requires a trimmed query length before suggestions activate. | `<ForeFill minQueryLength={3} />` |
+| `debounceMs` | `number`, default `0` | Delays async requests while the user is typing. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={300} />` |
+| `disableInlineFill` | `boolean`, default `false` | Keeps the editable field behavior but hides ghost hints. | `<ForeFill disableInlineFill />` |
+| `enableArrowNavigation` | `boolean`, default `true` | Lets Up and Down cycle through multiple matching hints. | `<ForeFill enableArrowNavigation={false} />` |
+
+### Surface And Value
+
+| Prop | Type / default | Use | Example |
+| --- | --- | --- | --- |
+| `as` | `'textarea' \| 'input' \| 'richtext'`, default `'textarea'` | Chooses the editable surface. | `<ForeFill as="input" suggestions={suggestions} />` |
+| `rows` | `number`, default `3` | Sets visible rows for `as="textarea"`. | `<ForeFill as="textarea" rows={5} />` |
+| `inputType` | `string`, default `'text'` | Sets the native type for `as="input"`. | `<ForeFill as="input" inputType="email" />` |
+| `placeholder` | `string`, default `'Type to search...'` | Sets the placeholder or richtext empty-state text. | `<ForeFill placeholder="Write a reply..." />` |
+| `defaultValue` | `string`, default `''` | Sets the initial uncontrolled value. | `<ForeFill defaultValue="Existing text. " />` |
+| `value` | `string` | Makes the component controlled; pair it with `onChange`. | `<ForeFill value={value} onChange={setValue} />` |
+| `disabled` | `boolean`, default `false` | Disables input and interactive completion. | `<ForeFill disabled />` |
+| `readOnly` | `boolean`, default `false` | Shows a value without allowing edits or hints. | `<ForeFill readOnly value="Saved reply" />` |
+
+### Events And Accept Behavior
+
+| Prop | Type / default | Use | Example |
+| --- | --- | --- | --- |
+| `onChange` | `(value: string) => void` | Runs on every typed value change. | `<ForeFill value={value} onChange={setValue} />` |
+| `onCommit` | `(value: string) => void` | Runs when the user commits typed text or accepts a hint. | `<ForeFill onCommit={(value) => save(value)} />` |
+| `onAccept` | `(value: string, suggestion: string) => void` | Runs only when a suggestion is accepted. | `<ForeFill onAccept={(_value, suggestion) => track(suggestion)} />` |
+| `onDismiss` | `() => void` | Runs when Escape hides a visible hint. | `<ForeFill onDismiss={() => track('dismissed')} />` |
+| `acceptOnEnter` | `boolean`, default `true` | When false, Enter commits typed text and Tab accepts hints. | `<ForeFill acceptOnEnter={false} />` |
+| `commitOnBlur` | `boolean`, default `false` | Commits the current value when focus leaves the field. | `<ForeFill commitOnBlur onCommit={save} />` |
+| `partialAccept` | `boolean`, default `true` | Lets users accept one word with Ctrl/Cmd + ArrowRight. | `<ForeFill partialAccept={false} />` |
+
+### Helper, Status, And Accessibility
+
+| Prop | Type / default | Use | Example |
+| --- | --- | --- | --- |
+| `ariaLabel` | `string`, default `placeholder` | Labels the field when no visible label is connected. | `<ForeFill ariaLabel="Compose reply" />` |
+| `showHelper` | `boolean \| 'idle'`, default `false` | Shows the inline keyboard helper immediately, after idle, or never. | `<ForeFill showHelper="idle" />` |
+| `helperIdleMs` | `number`, default `900` | Controls the idle delay when `showHelper="idle"`. | `<ForeFill showHelper="idle" helperIdleMs={1200} />` |
+| `helperText` | `ReactNode`, default built-in helper | Replaces the helper copy with custom React content. | `<ForeFill showHelper helperText="Tab accepts" />` |
+| `helperClassName` | `string` | Styles the helper wrapper with a class. | `<ForeFill showHelper helperClassName="reply-helper" />` |
+| `status` | `'idle' \| 'loading' \| 'success' \| 'error'` | Drives loading, success, or error treatments; error sets `aria-invalid`. | `<ForeFill status="error" />` |
+
+### Styling And Forms
+
+| Prop | Type / default | Use | Example |
+| --- | --- | --- | --- |
+| `className` | `string` | Styles the root wrapper and scopes CSS variable overrides. | `<ForeFill className="reply-field" />` |
+| `editorClassName` | `string` | Styles the editable textarea, input, or richtext element. | `<ForeFill editorClassName="reply-editor" />` |
+| `variant` | `'outline' \| 'filled' \| 'underline'`, default `'outline'` | Chooses the built-in border/fill treatment. | `<ForeFill variant="filled" />` |
+| `size` | `'sm' \| 'md' \| 'lg'`, default `'md'` | Adjusts font size, padding, and minimum height. | `<ForeFill size="lg" />` |
+| `theme` | `'light' \| 'dark'` | Forces a color scheme; omit it to follow system preference. | `<ForeFill theme="dark" />` |
+| `name` | `string` | Forwards the native form name to input/textarea. | `<ForeFill as="input" name="reply" />` |
+| `id` | `string` | Sets the editable element id for labels. | `<ForeFill id="reply" />` |
+| `required` | `boolean`, default `false` | Marks input/textarea required and sets `aria-required`. | `<ForeFill required />` |
+| `maxLength` | `number` | Sets the native maximum length for input/textarea. | `<ForeFill maxLength={280} />` |
+| `autoFocus` | `boolean`, default `false` | Focuses the field on mount. | `<ForeFill autoFocus />` |
+
+## Trigger Suggestion Type
+
+```ts
+type ForeFillTriggerSuggestion = {
+  trigger: string;
+  suggestions: string[];
+  minQueryLength?: number;
+  caseSensitive?: boolean;
+};
+```
+
+| Field | Use | Example |
+| --- | --- | --- |
+| `trigger` | Text that activates a completion group. | `{ trigger: '@', suggestions: ['gmail.com'] }` |
+| `suggestions` | Values offered after the trigger. Leading spaces are preserved. | `{ trigger: 'Happy', suggestions: [' Birthday!'] }` |
+| `minQueryLength` | Optional query length required after the trigger. | `{ trigger: '@', minQueryLength: 1, suggestions: ['gmail.com'] }` |
+| `caseSensitive` | Requires exact casing for the trigger and query. | `{ trigger: 'SKU', caseSensitive: true, suggestions: ['-001'] }` |
+
+## Imperative Handle Type
+
+Use `ref` when another control needs to move focus or selection.
+
+```ts
+type ForeFillHandle = {
+  focus: () => void;
+  blur: () => void;
+  select: () => void;
+};
+```
+
+```tsx
+const ref = useRef<ForeFillHandle>(null);
+
+<ForeFill ref={ref} suggestions={suggestions} />;
+<button type="button" onClick={() => ref.current?.focus()}>Focus</button>;
+```
 
 ## Suggestion Hook
 
-The matching engine is also exported for custom interfaces:
+The matching engine is also exported for custom interfaces.
 
 ```tsx
 import { useSuggestions } from 'forefill';
@@ -742,6 +769,31 @@ function CustomAutosuggest({ suggestions }: { suggestions: string[] }) {
   return null;
 }
 ```
+
+```ts
+type UseSuggestionsOptions = {
+  suggestions?: string[];
+  asyncFetcher?: (query: string) => Promise<string[]>;
+  minQueryLength?: number;
+  debounceMs?: number;
+  matchMode?: 'startsWith' | 'substring' | 'fuzzy';
+};
+
+type UseSuggestionsResult = {
+  matches: string[];
+  isLoading: boolean;
+};
+```
+
+| Option / result | Use | Example |
+| --- | --- | --- |
+| `suggestions` | Static list filtered on the client. | `useSuggestions(query, { suggestions })` |
+| `asyncFetcher` | Async source; replaces static filtering. | `useSuggestions(query, { asyncFetcher: fetchSuggestions })` |
+| `minQueryLength` | Returns no matches until the trimmed query is long enough. | `useSuggestions(query, { minQueryLength: 2 })` |
+| `debounceMs` | Debounces async queries. | `useSuggestions(query, { asyncFetcher, debounceMs: 250 })` |
+| `matchMode` | Supports `startsWith`, `substring`, and hook-only `fuzzy`. | `useSuggestions(query, { matchMode: 'fuzzy' })` |
+| `matches` | The filtered suggestion strings. | `const { matches } = useSuggestions(query, options)` |
+| `isLoading` | True while an async fetch is in flight. | `const { isLoading } = useSuggestions(query, options)` |
 
 ## Local Development
 
