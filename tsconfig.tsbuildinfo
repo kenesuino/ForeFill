@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/lib/smarttextareaautocomplete.tsx","./src/lib/index.ts","./src/lib/hooks/usedebouncedvalue.ts","./src/lib/hooks/usesuggestions.ts","./src/lib/utils/cx.ts","./src/lib/utils/filtermatches.ts"],"version":"5.9.3"}

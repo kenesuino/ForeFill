@@ -1,0 +1,103 @@
+/* Library component styles (vanilla, dependency-free — shipped to consumers). */
+@import './lib/styles/forefill.css';
+
+/* Tailwind powers the documentation/demo site only (never the library). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@keyframes ff-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ff-fade-up {
+  animation: ff-fade-up 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes ff-caret-blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.ff-caret {
+  animation: ff-caret-blink 1.06s step-end infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-caret {
+    animation: none;
+  }
+}
+
+/* Smooth auto-fill: a left-to-right wipe used by the hero description
+   once the typed prefix ends with the trigger substring. The text is always
+   present, but a mask reveals it from left to right via an animatable
+   custom property, so the remainder "fills in" smoothly without per-char
+   typing. */
+@property --ff-fill {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+@keyframes ff-smooth-fill {
+  to {
+    --ff-fill: 100%;
+  }
+}
+
+.ff-smooth-fill {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black var(--ff-fill),
+    transparent var(--ff-fill)
+  );
+  mask-image: linear-gradient(
+    to right,
+    black var(--ff-fill),
+    transparent var(--ff-fill)
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  animation: ff-smooth-fill 540ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ff-smooth-fill {
+    animation: none;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}

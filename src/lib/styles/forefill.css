@@ -1,0 +1,531 @@
+/* ============================================================================
+   Inline Autocomplete — Design Tokens & Component Styles
+   ----------------------------------------------------------------------------
+   100% dependency-free, native CSS. No Tailwind, Bootstrap, or any third-party
+   framework — everything below is hand-authored custom properties + selectors.
+
+   Every visual value is exposed as a CSS custom property so consumers can
+   re-skin the component without touching JS or this file:
+
+       .my-page { --ff-accent: #ff5e5e; --ff-radius: 12px; }
+
+   Theming hooks of note:
+     --ff-accent      primary interaction color
+     --ff-success     success / valid state color
+     --ff-danger      error / invalid state color
+     --ff-radius      corner rounding (fluid via clamp by default)
+     --ff-font        font stack
+   Dark mode is automatic (prefers-color-scheme) and can be forced with
+   `data-theme="dark"` / `data-theme="light"` on the root or any ancestor.
+   ============================================================================ */
+
+.ff-root {
+  /* ----- Typography ----------------------------------------------------- */
+  --ff-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* ----- Shape ---------------------------------------------------------- */
+  --ff-radius: clamp(8px, 0.6vw + 6px, 14px);
+
+  /* ----- Motion (single source of truth for timing) --------------------- */
+  --ff-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ff-duration: 180ms;
+  --ff-duration-fast: 110ms;
+
+  /* ----- Light palette (base) ------------------------------------------- */
+  /* New, cleaner token names. Each reads its legacy `--ff-color-*` name as a
+     fallback first, so themes written against the documented v0.1 API keep
+     working unchanged. */
+  --ff-bg: var(--ff-color-bg-focus, var(--ff-color-bg, #ffffff));
+  --ff-bg-rest: var(--ff-color-muted-bg, #f6f7f9);
+  --ff-bg-hover: #f1f3f6;
+  --ff-surface-muted: var(--ff-color-muted-bg, #f3f5f8);
+  --ff-text: var(--ff-color-text, #16202c);
+  --ff-muted: var(--ff-color-muted, #5b6675);
+  --ff-faint: color-mix(in srgb, var(--ff-muted) 70%, transparent);
+  --ff-border: var(--ff-color-border, #d7dde6);
+  --ff-border-strong: color-mix(in srgb, var(--ff-border) 70%, var(--ff-text));
+
+  --ff-accent: var(--ff-color-accent, #2563eb);
+  --ff-accent-strong: color-mix(in srgb, var(--ff-accent) 80%, #000);
+  --ff-success: #0e9f6e;
+  --ff-danger: #e02424;
+
+  /* Derived tints (color-mix keeps the palette coherent from one token). */
+  --ff-accent-soft: color-mix(in srgb, var(--ff-accent) 12%, transparent);
+  --ff-ring: color-mix(in srgb, var(--ff-accent) 32%, transparent);
+  --ff-ring-danger: color-mix(in srgb, var(--ff-danger) 32%, transparent);
+  --ff-ring-success: color-mix(in srgb, var(--ff-success) 30%, transparent);
+
+  /* ----- Elevation ------------------------------------------------------ */
+  --ff-shadow-rest: 0 1px 1px rgba(16, 24, 40, 0.04);
+  --ff-shadow-focus: 0 6px 20px -8px color-mix(in srgb, var(--ff-accent) 45%, transparent),
+    0 1px 2px rgba(16, 24, 40, 0.06);
+
+  /* ----- Keycap palette (legacy --ff-helper-key-* names honored) ------- */
+  --ff-key-bg: var(--ff-helper-key-bg, #ffffff);
+  --ff-key-border: var(
+    --ff-helper-key-border,
+    color-mix(in srgb, var(--ff-muted) 40%, transparent)
+  );
+  --ff-key-shadow: var(
+    --ff-helper-key-shadow,
+    inset 0 -1px 0 rgba(15, 23, 42, 0.1),
+    0 1px 1.5px rgba(15, 23, 42, 0.08)
+  );
+
+  /* ----- Helper sizing (names unchanged from v0.1) ---------------------- */
+  --ff-helper-font-size: 0.78em;
+  --ff-helper-gap: 0.34em;
+  --ff-helper-margin-left: 0.42em;
+  --ff-helper-opacity: 0.85;
+  --ff-helper-separator-margin-right: 0.16em;
+  --ff-key-min-width: var(--ff-helper-key-min-width, 2.05em);
+  --ff-key-min-height: var(--ff-helper-key-min-height, 1.5em);
+  --ff-key-padding-x: var(--ff-helper-key-padding-x, 0.4em);
+  --ff-key-radius: var(--ff-helper-key-radius, 4px);
+  --ff-key-font-size: var(--ff-helper-key-font-size, 0.82em);
+  --ff-key-font-weight: var(--ff-helper-key-font-weight, 600);
+
+  /* ----- Sizing defaults (= size "md"); overridden by [data-size] below -- */
+  --ff-padding-y: 0.6rem;
+  --ff-padding-x: 0.85rem;
+  --ff-font-size: clamp(0.875rem, 0.2vw + 0.84rem, 0.95rem);
+  --ff-line-height: 1.45;
+  --ff-min-height: 4.75rem;
+  --ff-input-min-height: 2.6rem;
+
+  /* ----- Border state (resolved by variant selectors) ------------------- */
+  --ff-border-width: 1.5px;
+  --ff-border-color: var(--ff-border);
+  --ff-border-bottom-color: var(--ff-border);
+  --ff-border-radius: var(--ff-radius);
+  --ff-active-ring: var(--ff-ring);
+
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  font-family: var(--ff-font);
+  color: var(--ff-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.ff-root *,
+.ff-root *::before,
+.ff-root *::after {
+  box-sizing: border-box;
+}
+
+/* ----- Sizes (data-size on root) ---------------------------------------- */
+.ff-root[data-size="sm"] {
+  --ff-padding-y: 0.45rem;
+  --ff-padding-x: 0.7rem;
+  --ff-font-size: clamp(0.8125rem, 0.15vw + 0.79rem, 0.875rem);
+  --ff-line-height: 1.4;
+  --ff-min-height: 3.75rem;
+  --ff-input-min-height: 2.3rem;
+}
+.ff-root[data-size="md"] {
+  --ff-padding-y: 0.6rem;
+  --ff-padding-x: 0.85rem;
+  --ff-font-size: clamp(0.875rem, 0.2vw + 0.84rem, 0.95rem);
+  --ff-line-height: 1.45;
+  --ff-min-height: 4.75rem;
+  --ff-input-min-height: 2.6rem;
+}
+.ff-root[data-size="lg"] {
+  --ff-padding-y: 0.8rem;
+  --ff-padding-x: 1.05rem;
+  --ff-font-size: clamp(1rem, 0.3vw + 0.95rem, 1.1rem);
+  --ff-line-height: 1.55;
+  --ff-min-height: 6.25rem;
+  --ff-input-min-height: 3.1rem;
+}
+
+/* ----- Variants (data-variant on root) ---------------------------------- */
+.ff-root[data-variant="outline"] .ff-field {
+  --ff-border-color: var(--ff-border);
+  --ff-border-bottom-color: var(--ff-border);
+  background: var(--ff-bg);
+}
+.ff-root[data-variant="outline"] .ff-field:hover {
+  --ff-border-color: var(--ff-border-strong);
+}
+
+.ff-root[data-variant="filled"] .ff-field {
+  --ff-border-color: transparent;
+  --ff-border-bottom-color: transparent;
+  background: var(--ff-bg-rest);
+}
+.ff-root[data-variant="filled"] .ff-field:hover {
+  background: var(--ff-bg-hover);
+}
+.ff-root[data-variant="filled"] .ff-field:focus-within {
+  background: var(--ff-bg);
+}
+
+.ff-root[data-variant="underline"] .ff-field {
+  --ff-border-color: transparent;
+  --ff-border-bottom-color: var(--ff-border);
+  --ff-border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.ff-root[data-variant="underline"] .ff-field:hover {
+  --ff-border-bottom-color: var(--ff-border-strong);
+}
+
+/* ----- The field (relative host for the ghost overlay) ------------------ */
+.ff-field {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--ff-border-radius);
+  border: var(--ff-border-width) solid var(--ff-border-color);
+  border-bottom-color: var(--ff-border-bottom-color);
+  box-shadow: var(--ff-shadow-rest);
+  transition: border-color var(--ff-duration) var(--ff-ease),
+    background-color var(--ff-duration) var(--ff-ease),
+    box-shadow var(--ff-duration) var(--ff-ease),
+    transform var(--ff-duration-fast) var(--ff-ease);
+}
+
+/* Focus: accent border + soft ring (focus-visible only — pointer focus on a
+   textarea shouldn't flash a ring, but :focus-within is the only reliable
+   wrapper hook, so we gate the ring on the editor's own :focus-visible). */
+.ff-field:focus-within {
+  --ff-border-color: var(--ff-accent);
+  --ff-border-bottom-color: var(--ff-accent);
+  box-shadow: 0 0 0 3px var(--ff-active-ring), var(--ff-shadow-focus);
+}
+.ff-root[data-variant="underline"] .ff-field:focus-within {
+  --ff-border-color: transparent;
+  box-shadow: none;
+}
+
+/* Animated accent underline for the underline variant (grows from center). */
+.ff-root[data-variant="underline"] .ff-field::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0; /* sits at the inner bottom edge; the field clips overflow */
+  height: 2px;
+  background: var(--ff-accent);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--ff-duration) var(--ff-ease);
+}
+.ff-root[data-variant="underline"] .ff-field:focus-within::after {
+  transform: scaleX(1);
+}
+
+/* ----- Validation states (data-state on root) --------------------------- */
+.ff-root[data-state="error"] .ff-field {
+  --ff-border-color: var(--ff-danger);
+  --ff-border-bottom-color: var(--ff-danger);
+  --ff-active-ring: var(--ff-ring-danger);
+}
+.ff-root[data-state="success"] .ff-field {
+  --ff-border-color: var(--ff-success);
+  --ff-border-bottom-color: var(--ff-success);
+  --ff-active-ring: var(--ff-ring-success);
+}
+
+/* ----- Indeterminate loading bar along the bottom edge ------------------ */
+.ff-field::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--ff-accent),
+    transparent
+  );
+  opacity: 0;
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.ff-root[data-loading="true"] .ff-field::before {
+  opacity: 1;
+  animation: ff-loading-sweep 1.1s var(--ff-ease) infinite;
+}
+
+@keyframes ff-loading-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+/* ----- Ghost suggestion overlay ----------------------------------------- */
+.ff-ghost {
+  position: absolute;
+  inset: var(--ff-padding-y) var(--ff-padding-x);
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: hidden;
+  font-family: inherit;
+  font-size: var(--ff-font-size);
+  font-weight: inherit;
+  line-height: var(--ff-line-height);
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-indent: inherit;
+  color: transparent;
+  z-index: 0;
+  animation: ff-ghost-in var(--ff-duration) var(--ff-ease) both;
+}
+
+@keyframes ff-ghost-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ff-root[data-surface="input"] .ff-ghost {
+  white-space: pre;
+  word-wrap: normal;
+}
+
+/* Hidden width-measuring span used to align the typed text over the ghost. */
+.ff-ghost-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+  white-space: pre;
+  font-family: inherit;
+  font-size: var(--ff-font-size);
+  font-weight: inherit;
+  line-height: var(--ff-line-height);
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-indent: inherit;
+}
+
+.ff-ghost-prefix,
+.ff-ghost-suffix {
+  color: var(--ff-faint);
+}
+.ff-ghost-typed {
+  color: transparent;
+}
+
+/* ----- Editable surfaces ------------------------------------------------ */
+.ff-editor {
+  position: relative;
+  display: block;
+  width: 100%;
+  resize: none;
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--ff-font-size);
+  font-weight: inherit;
+  line-height: var(--ff-line-height);
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-indent: inherit;
+  color: var(--ff-text);
+  background: transparent;
+  caret-color: var(--ff-accent);
+  padding: var(--ff-padding-y) var(--ff-padding-x);
+  min-height: var(--ff-min-height);
+  border: none;
+  outline: none;
+  transition: padding-left var(--ff-duration) var(--ff-ease);
+  z-index: 1;
+}
+.ff-editor--input {
+  height: var(--ff-input-min-height);
+  min-height: var(--ff-input-min-height);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.ff-editor--richtext {
+  min-height: var(--ff-min-height);
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+.ff-editor--richtext[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--ff-muted);
+  pointer-events: none;
+}
+
+.ff-editor::placeholder {
+  color: var(--ff-muted);
+  opacity: 1;
+}
+
+/* Disabled */
+.ff-root[data-disabled="true"] .ff-field {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  background: var(--ff-surface-muted);
+}
+.ff-editor:disabled,
+.ff-editor--richtext[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* ----- Inline keyboard helper ------------------------------------------- */
+.ff-helper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ff-helper-gap);
+  margin-left: var(--ff-helper-margin-left);
+  color: var(--ff-muted);
+  font-size: var(--ff-helper-font-size);
+  opacity: var(--ff-helper-opacity);
+  white-space: nowrap;
+  vertical-align: baseline;
+  animation: ff-helper-in var(--ff-duration) var(--ff-ease) both;
+}
+
+@keyframes ff-helper-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: var(--ff-helper-opacity);
+    transform: translateX(0);
+  }
+}
+
+.ff-helper-separator {
+  color: var(--ff-faint);
+  margin-right: var(--ff-helper-separator-margin-right);
+}
+
+.ff-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--ff-key-min-width);
+  min-height: var(--ff-key-min-height);
+  padding: 0 var(--ff-key-padding-x);
+  border: 1px solid var(--ff-key-border);
+  border-radius: var(--ff-key-radius);
+  background: var(--ff-key-bg);
+  box-shadow: var(--ff-key-shadow);
+  color: var(--ff-text);
+  font-family: inherit;
+  font-size: var(--ff-key-font-size);
+  font-weight: var(--ff-key-font-weight);
+  line-height: 1;
+}
+
+/* ----- Status / validation message ------------------------------------- */
+.ff-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-top: 0.45rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--ff-muted);
+  animation: ff-helper-in var(--ff-duration-fast) var(--ff-ease) both;
+}
+.ff-root[data-state="error"] .ff-status {
+  color: var(--ff-danger);
+}
+.ff-root[data-state="success"] .ff-status {
+  color: var(--ff-success);
+}
+
+/* ----- Screen-reader-only utility --------------------------------------- */
+.ff-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ----- Dark mode -------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  .ff-root:not([data-theme="light"]) {
+    --ff-bg: #161b22;
+    --ff-bg-rest: #1b212b;
+    --ff-bg-hover: #212835;
+    --ff-surface-muted: #1b212b;
+    --ff-text: #e6edf3;
+    --ff-muted: #9aa6b4;
+    --ff-faint: #6e7a8a;
+    --ff-border: #2c333d;
+    --ff-border-strong: #3b4250;
+    --ff-accent: #5b9bff;
+    --ff-accent-strong: #7aafff;
+    --ff-success: #2dd4a7;
+    --ff-danger: #ff6b6b;
+    --ff-key-bg: #242b36;
+    --ff-key-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+      0 1px 1.5px rgba(0, 0, 0, 0.4);
+  }
+}
+.ff-root[data-theme="dark"] {
+  --ff-bg: #161b22;
+  --ff-bg-rest: #1b212b;
+  --ff-bg-hover: #212835;
+  --ff-surface-muted: #1b212b;
+  --ff-text: #e6edf3;
+  --ff-muted: #9aa6b4;
+  --ff-faint: #6e7a8a;
+  --ff-border: #2c333d;
+  --ff-border-strong: #3b4250;
+  --ff-accent: #5b9bff;
+  --ff-accent-strong: #7aafff;
+  --ff-success: #2dd4a7;
+  --ff-danger: #ff6b6b;
+  --ff-key-bg: #242b36;
+  --ff-key-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+    0 1px 1.5px rgba(0, 0, 0, 0.4);
+}
+
+/* ----- Forced-colors / high-contrast ------------------------------------ */
+@media (forced-colors: active) {
+  .ff-field {
+    border: 1px solid CanvasText;
+  }
+  .ff-field:focus-within {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* ----- Reduced motion --------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .ff-field,
+  .ff-editor,
+  .ff-ghost,
+  .ff-helper,
+  .ff-status,
+  .ff-root[data-variant="underline"] .ff-field::after {
+    transition: none;
+    animation: none;
+  }
+  .ff-root[data-loading="true"] .ff-field::before {
+    animation: none;
+    opacity: 0.6;
+  }
+}

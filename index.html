@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#0b0f16" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta
+      name="description"
+      content="ForeFill — inline ghost-text autocomplete for React textareas, inputs, and contenteditable richtext surfaces. Zero UI dependencies."
+    />
+    <meta property="og:title" content="ForeFill — Inline Autocomplete for React" />
+    <meta
+      property="og:description"
+      content="Ghost-text autocomplete for React — in textareas, inputs, and rich-text fields. Type a few letters, press Tab, done."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <title>ForeFill — Inline Autocomplete for React</title>
+    <!-- Apply the saved/system theme before paint to avoid a flash of the wrong mode. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('forefill-theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          var r = document.documentElement;
+          r.classList.toggle('dark', t === 'dark');
+          r.style.colorScheme = t;
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

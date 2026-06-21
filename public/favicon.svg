@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 400">
+  <defs>
+    <linearGradient id="bar1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#8699C3"/>
+      <stop offset="100%" stop-color="#6F84B2"/>
+    </linearGradient>
+    <linearGradient id="bar2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#9AAACC"/>
+      <stop offset="100%" stop-color="#8398C1"/>
+    </linearGradient>
+    <linearGradient id="bar3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#B7C4DD"/>
+      <stop offset="100%" stop-color="#A2B2D2"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="180" y="30" width="24" height="337" rx="12" fill="#07154D"/>
+
+  <rect x="242" y="67" width="320" height="51" rx="25.5" fill="url(#bar1)"/>
+  <rect x="242" y="171" width="255" height="51" rx="25.5" fill="url(#bar2)"/>
+  <rect x="242" y="274" width="170" height="53" rx="26.5" fill="url(#bar3)"/>
+</svg>
