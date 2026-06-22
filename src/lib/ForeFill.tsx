@@ -12,6 +12,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
 } from 'react';
@@ -174,6 +175,45 @@ export interface ForeFillProps {
    * browser's normal word navigation.
    */
   partialAccept?: boolean;
+
+  // ----- Touch support ---------------------------------------------------
+  /**
+   * Show tappable touch controls for accepting the hint — an "accept" chip
+   * floating over the field, plus tappable ghost words (word-by-word accept,
+   * gated by `partialAccept`). `'auto'` (default) shows them only when a coarse
+   * pointer is detected; `true` always shows them; `false` never does.
+   */
+  touchAccept?: boolean | 'auto';
+  /** Accessible label for the accept chip. Default `'Accept suggestion'`. */
+  touchAcceptLabel?: string;
+  /** Extra classes merged onto the accept chip. */
+  touchAcceptClassName?: string;
+  /**
+   * Headless override for the accept chip. Receives `{ accept, suggestion,
+   * label }`. The returned node MUST call `accept()` from an `onPointerDown`
+   * that calls `preventDefault()`, otherwise the editor blurs and the ghost is
+   * cleared before the accept runs.
+   */
+  renderTouchAccept?: (api: TouchAcceptRenderProps) => ReactNode;
+
+  /**
+   * Render the inline ghost as if the field were focused, without stealing DOM
+   * focus (which would open the soft keyboard on touch devices). Intended for
+   * showcase/preview scenarios where the value is driven externally. The user
+   * cannot accept or type into an `active`-only field until it receives a real
+   * focus click/tap. Default `false`.
+   */
+  active?: boolean;
+}
+
+/** Argument passed to {@link ForeFillProps.renderTouchAccept}. */
+export interface TouchAcceptRenderProps {
+  /** Accepts the full hint. Call this from a `preventDefault`-ed pointerdown. */
+  accept: () => void;
+  /** The full suggestion text behind the current ghost. */
+  suggestion: string;
+  /** The configured accessible label (`touchAcceptLabel`). */
+  label: string;
 }
 
 export interface ForeFillHandle {
@@ -219,6 +259,9 @@ const DEFAULTS = {
   minQueryLength: 1,
   debounceMs: 0,
   helperIdleMs: 900,
+  touchAccept: 'auto' as boolean | 'auto',
+  touchAcceptLabel: 'Accept suggestion',
+  active: false,
 };
 
 const DEFAULT_TRIGGER_SUGGESTIONS: ForeFillTriggerSuggestion[] = [];
@@ -426,6 +469,26 @@ function nextWordLength(suffix: string): number {
   return match ? match[0].length : suffix.length;
 }
 
+/**
+ * Splits a ghost suffix into word segments for tappable word-by-word accept.
+ * Each segment carries its cumulative end offset within the suffix, so tapping
+ * it can accept everything up to (and including) that word. Uses the same word
+ * boundary as {@link nextWordLength}, so a tap accepts what `Ctrl/Cmd+Right`
+ * would after the corresponding number of presses.
+ */
+function splitGhostWords(suffix: string): { text: string; end: number }[] {
+  const words: { text: string; end: number }[] = [];
+  let start = 0;
+  while (start < suffix.length) {
+    const len = nextWordLength(suffix.slice(start));
+    if (len <= 0) break;
+    const end = start + len;
+    words.push({ text: suffix.slice(start, end), end });
+    start = end;
+  }
+  return words;
+}
+
 function getEditableText(node: EditableElement): string {
   if (node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) {
     return node.value;
@@ -559,6 +622,11 @@ export const ForeFill = forwardRef(function ForeFill(
     acceptOnEnter = true,
     commitOnBlur = false,
     partialAccept = true,
+    touchAccept = DEFAULTS.touchAccept,
+    touchAcceptLabel = DEFAULTS.touchAcceptLabel,
+    touchAcceptClassName,
+    renderTouchAccept,
+    active = DEFAULTS.active,
   } = props;
 
   const isControlled = value !== undefined;
@@ -576,6 +644,10 @@ export const ForeFill = forwardRef(function ForeFill(
   const [caretAtEnd, setCaretAtEnd] = useState(true);
   const [activeSegmentStart, setActiveSegmentStart] = useState(0);
   const [ghostScroll, setGhostScroll] = useState({ left: 0, top: 0 });
+  // Coarse-pointer detection for `touchAccept: 'auto'`. Starts `false` so the
+  // server and the first client render agree (no hydration mismatch); a client
+  // effect flips it once `matchMedia` is available.
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false);
 
   const editorRef = useRef<EditableElement | null>(null);
   const ghostMeasureRef = useRef<HTMLSpanElement | null>(null);
@@ -586,6 +658,18 @@ export const ForeFill = forwardRef(function ForeFill(
   // keeps rendering instead of being suppressed by a mid-string caret.
   const forceCaretEndRef = useRef(false);
   const helperId = useId();
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mql = window.matchMedia('(pointer: coarse)');
+    const update = () => setIsCoarsePointer(mql.matches);
+    update();
+    mql.addEventListener?.('change', update);
+    return () => mql.removeEventListener?.('change', update);
+  }, []);
+
+  const touchControlsActive =
+    touchAccept === true || (touchAccept === 'auto' && isCoarsePointer);
 
   const completionContext = useMemo(
     () => getCompletionContext(currentValue, activeSegmentStart),
@@ -714,6 +798,52 @@ export const ForeFill = forwardRef(function ForeFill(
       setValue(nextValue);
     },
     [setValue]
+  );
+
+  // Keep the latest ghost reachable from the touch handlers without listing it
+  // as a dependency, so `acceptGhost`/`renderTouchAccept` stay referentially
+  // stable across the rapid ghost updates while typing.
+  const ghostCompletionRef = useRef<InlineCompletion | null>(null);
+  ghostCompletionRef.current = ghostCompletion;
+
+  // Full accept — same path as Tab/Enter. Used by the accept chip and by
+  // tapping the final ghost word.
+  const acceptGhost = useCallback(() => {
+    const completion = ghostCompletionRef.current;
+    if (!completion) return;
+    onAccept?.(completion.finalValue, completion.suggestion);
+    commitValue(completion.finalValue);
+    editorRef.current?.focus(); // keep the soft keyboard up for continued typing
+  }, [commitValue, onAccept]);
+
+  // Word-by-word accept — same path as Ctrl/Cmd+ArrowRight. `endOffset` is an
+  // index into the ghost suffix. Falls back to a full accept when partial
+  // accept is unsupported (disabled, prefixed hint) or the last word is tapped.
+  const acceptGhostUpTo = useCallback(
+    (endOffset: number) => {
+      const completion = ghostCompletionRef.current;
+      if (!completion) return;
+      const { prefix, suffix } = completion.parts;
+      if (!partialAccept || prefix !== '' || endOffset >= suffix.length) {
+        acceptGhost();
+        return;
+      }
+      extendValue(currentValue + suffix.slice(0, endOffset));
+      editorRef.current?.focus();
+    },
+    [partialAccept, currentValue, extendValue, acceptGhost]
+  );
+
+  // Touch targets must accept on pointerdown: `preventDefault` keeps focus on
+  // the editor so its blur handler can't clear the ghost before we read it;
+  // `stopPropagation` avoids the document-level selectionchange churn.
+  const onAcceptPointerDown = useCallback(
+    (run: () => void) => (e: ReactPointerEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      run();
+    },
+    []
   );
 
   const handleEditorChange = (nextValue: string) => {
@@ -887,7 +1017,7 @@ export const ForeFill = forwardRef(function ForeFill(
 
   useEffect(() => {
     if (
-      !isFocused ||
+      (!isFocused && !active) ||
       disableInlineFill ||
       readOnly ||
       isDeletingRef.current ||
@@ -981,6 +1111,14 @@ export const ForeFill = forwardRef(function ForeFill(
   const isComposedGhost = ghostTextParts?.base !== undefined;
   const canCycleSuggestions = enableArrowNavigation && inlineMatches.length > 1;
 
+  // Tappable word-by-word accept only applies to start-anchored hints (empty
+  // prefix), matching the `Ctrl/Cmd+Right` constraint. Otherwise the suffix
+  // stays a single span that full-accepts on tap.
+  const tappableWords =
+    touchControlsActive && partialAccept && ghostTextParts?.prefix === '';
+  const ghostWords =
+    tappableWords && ghostTextParts ? splitGhostWords(ghostTextParts.suffix) : null;
+
   const showHelperText =
     showHelper !== false &&
     isHelperVisible &&
@@ -1045,14 +1183,20 @@ export const ForeFill = forwardRef(function ForeFill(
         }
       : undefined;
 
-  const acceptHintText = acceptOnEnter
-    ? 'Tab or Enter accepts the hint.'
-    : 'Tab accepts the hint. Enter commits typed text.';
+  const acceptHintText = touchControlsActive
+    ? tappableWords
+      ? 'Tap a word to accept it, or tap accept to take the whole hint.'
+      : 'Tap accept to take the hint.'
+    : acceptOnEnter
+      ? 'Tab or Enter accepts the hint.'
+      : 'Tab accepts the hint. Enter commits typed text.';
   const defaultHelperText = canCycleSuggestions
     ? `Arrow up or arrow down changes the hint. ${acceptHintText} Esc hides it.`
     : `${acceptHintText} Esc hides it.`;
 
-  const defaultHelper = (
+  const defaultHelper = touchControlsActive ? (
+    <span>{tappableWords ? 'Tap a word or accept to take the hint.' : 'Tap to accept.'}</span>
+  ) : (
     <>
       {canCycleSuggestions && (
         <>
@@ -1142,6 +1286,7 @@ export const ForeFill = forwardRef(function ForeFill(
       data-loading={isLoadingState ? 'true' : undefined}
       data-disabled={disabled ? 'true' : undefined}
       data-ghost-composed={isComposedGhost ? 'true' : undefined}
+      data-touch-accept={touchControlsActive ? 'true' : undefined}
       data-theme={theme}
     >
       <div className="ff-field">
@@ -1165,7 +1310,34 @@ export const ForeFill = forwardRef(function ForeFill(
             )}
             <span className="ff-ghost-prefix">{ghostTextParts.prefix}</span>
             <span className="ff-ghost-typed">{ghostTextParts.typed}</span>
-            <span className="ff-ghost-suffix">{ghostTextParts.suffix}</span>
+            <span className="ff-ghost-suffix">
+              {ghostWords ? (
+                ghostWords.map((word, index) => (
+                  <span
+                    key={index}
+                    className="ff-ghost-word"
+                    onPointerDown={onAcceptPointerDown(() =>
+                      acceptGhostUpTo(word.end)
+                    )}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    {word.text}
+                  </span>
+                ))
+              ) : touchControlsActive ? (
+                <span
+                  className="ff-ghost-word"
+                  onPointerDown={onAcceptPointerDown(acceptGhost)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => e.preventDefault()}
+                >
+                  {ghostTextParts.suffix}
+                </span>
+              ) : (
+                ghostTextParts.suffix
+              )}
+            </span>
             {showHelperText && (
               <span
                 className={cx('ff-helper', helperClassName)}
@@ -1255,6 +1427,30 @@ export const ForeFill = forwardRef(function ForeFill(
             style={editorPrefixStyle}
           />
         )}
+
+        {ghostTextParts &&
+          touchControlsActive &&
+          (renderTouchAccept ? (
+            renderTouchAccept({
+              accept: acceptGhost,
+              suggestion: ghostCompletion?.suggestion ?? '',
+              label: touchAcceptLabel,
+            })
+          ) : (
+            <button
+              type="button"
+              tabIndex={-1}
+              className={cx('ff-touch-accept', touchAcceptClassName)}
+              aria-label={touchAcceptLabel}
+              onPointerDown={onAcceptPointerDown(acceptGhost)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => e.preventDefault()}
+            >
+              <span aria-hidden="true" className="ff-touch-accept-glyph">
+                ↵
+              </span>
+            </button>
+          ))}
       </div>
 
       {showHelperText && (

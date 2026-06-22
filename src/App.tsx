@@ -16,12 +16,15 @@ import {
   Clipboard,
   Code2,
   Copy,
+  Hand,
+  Menu,
   Moon,
   Play,
   SlidersHorizontal,
   Sparkles,
   Sun,
   WandSparkles,
+  X,
   Zap,
 } from 'lucide-react';
 import {
@@ -32,10 +35,11 @@ import {
   type ForeFillSurface,
   type ForeFillTriggerSuggestion,
   type ForeFillVariant,
+  type TouchAcceptRenderProps,
 } from './lib';
 
 const PKG = 'forefill';
-const VERSION = '0.1.0';
+const VERSION = '0.1.4';
 const REPO_URL = 'https://github.com/kenesuino/ForeFill';
 const THEME_KEY = 'forefill-theme';
 const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`;
@@ -46,6 +50,7 @@ type Page = 'hero' | 'documentation' | 'playground';
 type ThemeMode = 'light' | 'dark';
 type ThemeChoice = 'auto' | 'light' | 'dark';
 type ShowHelperMode = 'idle' | 'true' | 'false';
+type TouchAcceptMode = 'auto' | 'true' | 'false';
 type StatusMode = 'idle' | 'loading' | 'success' | 'error';
 type TriggerMode = 'all' | 'email' | 'happy' | 'symbols' | 'none';
 type PlaygroundPresetId = 'reply' | 'email' | 'async' | 'note' | 'validation';
@@ -73,7 +78,7 @@ interface PlaygroundState {
   minQueryLength: number;
   debounceMs: number;
   asyncMode: boolean;
-  triggerMode: TriggerMode;
+  triggerSuggestions: ForeFillTriggerSuggestion[];
   disableInlineFill: boolean;
   enableArrowNavigation: boolean;
   acceptOnEnter: boolean;
@@ -90,6 +95,8 @@ interface PlaygroundState {
   maxLength: number;
   autoFocus: boolean;
   disabled: boolean;
+  touchAccept: TouchAcceptMode;
+  touchAcceptLabel: string;
 }
 
 interface PlaygroundEvent {
@@ -130,6 +137,7 @@ const GUIDE_SECTIONS = [
   { id: 'surfaces', label: 'Surfaces' },
   { id: 'styling', label: 'Styling' },
   { id: 'accessibility', label: 'Accessibility' },
+  { id: 'touch-support', label: 'Touch support' },
 ];
 
 const DOC_OVERVIEW = [
@@ -191,7 +199,7 @@ const PLAYGROUND_DEFAULT_STATE: PlaygroundState = {
   minQueryLength: 1,
   debounceMs: 0,
   asyncMode: false,
-  triggerMode: 'all',
+  triggerSuggestions: cloneTriggers('all'),
   disableInlineFill: false,
   enableArrowNavigation: true,
   acceptOnEnter: true,
@@ -208,6 +216,8 @@ const PLAYGROUND_DEFAULT_STATE: PlaygroundState = {
   maxLength: 0,
   autoFocus: false,
   disabled: false,
+  touchAccept: 'true',
+  touchAcceptLabel: 'Accept suggestion',
 };
 
 const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
@@ -226,7 +236,7 @@ const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
       inputType: 'email',
       placeholder: 'alex@g',
       ariaLabel: 'Email address',
-      triggerMode: 'email',
+      triggerSuggestions: cloneTriggers('email'),
       matchMode: 'startsWith',
       showHelper: 'true',
     },
@@ -240,7 +250,7 @@ const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
       placeholder: 'Search saved replies...',
       ariaLabel: 'Search saved replies',
       asyncMode: true,
-      triggerMode: 'none',
+      triggerSuggestions: [],
       debounceMs: 300,
       matchMode: 'substring',
       showHelper: 'false',
@@ -255,7 +265,7 @@ const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
       placeholder: 'Draft a note...',
       ariaLabel: 'Draft note',
       rows: 6,
-      triggerMode: 'happy',
+      triggerSuggestions: cloneTriggers('happy'),
       showHelper: 'idle',
     },
     suggestions: [
@@ -273,7 +283,7 @@ const PLAYGROUND_PRESETS: PlaygroundPreset[] = [
       as: 'input',
       placeholder: 'Required reply',
       ariaLabel: 'Required reply',
-      triggerMode: 'none',
+      triggerSuggestions: [],
       status: 'error',
       required: true,
       name: 'reply',
@@ -660,6 +670,38 @@ const API_PROPS: ApiProp[] = [
     purpose: 'Lets users take long hints gradually.',
     example: '<ForeFill partialAccept={false} />',
   },
+  {
+    name: 'touchAccept',
+    type: "boolean | 'auto'",
+    def: "'auto'",
+    desc: 'Shows tappable touch controls for accepting the hint.',
+    purpose: "An accept chip floating over the field plus tappable ghost words (word-by-word accept, gated by partialAccept). 'auto' shows them only on coarse pointers; true/false force on/off.",
+    example: '<ForeFill touchAccept />',
+  },
+  {
+    name: 'touchAcceptLabel',
+    type: 'string',
+    def: "'Accept suggestion'",
+    desc: 'Accessible label for the accept chip.',
+    purpose: 'Used as the aria-label of the built-in accept chip and passed to renderTouchAccept.',
+    example: '<ForeFill touchAccept touchAcceptLabel="Use suggestion" />',
+  },
+  {
+    name: 'touchAcceptClassName',
+    type: 'string',
+    def: '-',
+    desc: 'Extra classes merged onto the accept chip.',
+    purpose: 'Style or position the default accept chip without replacing it.',
+    example: '<ForeFill touchAccept touchAcceptClassName="my-chip" />',
+  },
+  {
+    name: 'renderTouchAccept',
+    type: '(api: TouchAcceptRenderProps) => ReactNode',
+    def: '-',
+    desc: 'Headless override for the accept chip.',
+    purpose: 'Receives { accept, suggestion, label }. The returned node MUST call accept() from a preventDefault-ed onPointerDown, otherwise the editor blurs and the ghost is cleared before the accept runs.',
+    example: '<ForeFill touchAccept renderTouchAccept={({ accept, suggestion }) => <button onPointerDown={(e) => { e.preventDefault(); accept(); }}>↵ {suggestion}</button>} />',
+  },
 ];
 
 function getInitialTheme(): ThemeMode {
@@ -957,9 +999,24 @@ function TopNav({
   theme: ThemeMode;
   onToggleTheme: () => void;
 }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [page]);
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMenuOpen]);
+
   return (
     <header className="sticky top-0 z-40 border-b border-[#D7DEE9] bg-white/85 backdrop-blur dark:border-white/10 dark:bg-[#10131A]/85">
-      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
         <a href="#hero" className="flex items-center gap-3">
           <img src={LOGO_URL} alt="" className="h-8 w-14" />
           <span className="font-extrabold tracking-tight">
@@ -970,39 +1027,88 @@ function TopNav({
           </span>
         </a>
 
-        <nav className="flex items-center gap-1 text-sm">
-          {PAGE_LINKS.map((link) => (
+        <div className="flex items-center gap-1">
+          <nav className="hidden items-center gap-1 text-sm sm:flex" aria-label="Primary">
+            {PAGE_LINKS.map((link) => (
+              <a
+                key={link.page}
+                href={link.hash}
+                aria-current={page === link.page ? 'page' : undefined}
+                className={`rounded-md px-3 py-2 font-semibold transition ${
+                  page === link.page
+                    ? 'bg-[#EEF2F8] text-[#07154D] dark:bg-[#6F84B2]/20 dark:text-[#A2B2D2]'
+                    : 'text-[#526078] hover:bg-[#EEF2F7] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:bg-white/10 dark:hover:text-white'
+                }`}
+              >
+                {link.label}
+              </a>
+            ))}
             <a
-              key={link.page}
-              href={link.hash}
-              aria-current={page === link.page ? 'page' : undefined}
-              className={`rounded-md px-3 py-2 font-semibold transition ${
-                page === link.page
-                  ? 'bg-[#EEF2F8] text-[#07154D] dark:bg-[#6F84B2]/20 dark:text-[#A2B2D2]'
-                  : 'text-[#526078] hover:bg-[#EEF2F7] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:bg-white/10 dark:hover:text-white'
-              }`}
+              href={REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="hidden rounded-md px-3 py-2 font-semibold text-[#526078] transition hover:bg-[#EEF2F7] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:bg-white/10 dark:hover:text-white lg:inline-block"
             >
-              {link.label}
+              GitHub
             </a>
-          ))}
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="hidden rounded-md px-3 py-2 font-semibold text-[#526078] transition hover:bg-[#EEF2F7] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:bg-white/10 dark:hover:text-white sm:inline-block"
-          >
-            GitHub
-          </a>
+          </nav>
+
           <button
             type="button"
             onClick={onToggleTheme}
             aria-label="Toggle theme"
-            className="ml-1 grid h-9 w-9 place-items-center rounded-md border border-[#D7DEE9] text-[#526078] transition hover:bg-[#EEF2F7] dark:border-white/10 dark:text-[#A8B3C7] dark:hover:bg-white/10"
+            className="grid h-9 w-9 place-items-center rounded-md border border-[#D7DEE9] text-[#526078] transition hover:bg-[#EEF2F7] dark:border-white/10 dark:text-[#A8B3C7] dark:hover:bg-white/10"
           >
             {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </button>
-        </nav>
+
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen((open) => !open)}
+            aria-label="Toggle navigation menu"
+            aria-expanded={isMenuOpen}
+            aria-controls="mobile-nav"
+            className="grid h-9 w-9 place-items-center rounded-md border border-[#D7DEE9] text-[#526078] transition hover:bg-[#EEF2F7] sm:hidden dark:border-white/10 dark:text-[#A8B3C7] dark:hover:bg-white/10"
+          >
+            {isMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
+
+      {isMenuOpen && (
+        <nav
+          id="mobile-nav"
+          aria-label="Mobile primary"
+          className="border-t border-[#D7DEE9] bg-white px-4 py-3 sm:hidden dark:border-white/10 dark:bg-[#10131A]"
+        >
+          <div className="mx-auto w-full max-w-7xl space-y-1">
+            {PAGE_LINKS.map((link) => (
+              <a
+                key={link.page}
+                href={link.hash}
+                aria-current={page === link.page ? 'page' : undefined}
+                onClick={() => setIsMenuOpen(false)}
+                className={`block rounded-md px-3 py-2.5 text-sm font-semibold transition ${
+                  page === link.page
+                    ? 'bg-[#EEF2F8] text-[#07154D] dark:bg-[#6F84B2]/20 dark:text-[#A2B2D2]'
+                    : 'text-[#526078] hover:bg-[#EEF2F7] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:bg-white/10 dark:hover:text-white'
+                }`}
+              >
+                {link.label}
+              </a>
+            ))}
+            <a
+              href={REPO_URL}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setIsMenuOpen(false)}
+              className="block rounded-md px-3 py-2.5 text-sm font-semibold text-[#526078] transition hover:bg-[#EEF2F7] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              GitHub
+            </a>
+          </div>
+        </nav>
+      )}
     </header>
   );
 }
@@ -1162,9 +1268,6 @@ function HeroTypingShowcase({
 }) {
   const [index, setIndex] = useState(0);
   const [values, setValues] = useState({ to: '', subject: '', body: '' });
-  const toRef = useRef<ForeFillHandle>(null);
-  const subjectRef = useRef<ForeFillHandle>(null);
-  const bodyRef = useRef<ForeFillHandle>(null);
   const item = HERO_TYPING_ITEMS[index];
   const activeFieldLabel =
     item.field === 'to'
@@ -1186,15 +1289,6 @@ function HeroTypingShowcase({
       setValues({ to: '', subject: '', body: '' });
     }
     setValues((current) => ({ ...current, [item.field]: '' }));
-    schedule(() => {
-      const activeRef =
-        item.field === 'to'
-          ? toRef
-          : item.field === 'subject'
-            ? subjectRef
-            : bodyRef;
-      activeRef.current?.focus();
-    }, 100);
 
     const chars = Array.from(item.seed);
     chars.forEach((_, charIndex) => {
@@ -1239,7 +1333,6 @@ function HeroTypingShowcase({
       <div className="space-y-3 p-4">
         <ComposeRow label="To">
           <ForeFill
-            ref={toRef}
             as="input"
             inputType="email"
             value={values.to}
@@ -1249,13 +1342,14 @@ function HeroTypingShowcase({
             placeholder="recipient@"
             ariaLabel="Compose recipient"
             showHelper={false}
+            touchAccept={false}
+            active
             theme={theme}
           />
         </ComposeRow>
 
         <ComposeRow label="Subject">
           <ForeFill
-            ref={subjectRef}
             as="input"
             value={values.subject}
             onChange={(value) =>
@@ -1266,13 +1360,14 @@ function HeroTypingShowcase({
             placeholder="Subject"
             ariaLabel="Compose subject"
             showHelper={false}
+            touchAccept={false}
+            active
             theme={theme}
           />
         </ComposeRow>
 
         <div>
           <ForeFill
-            ref={bodyRef}
             as="textarea"
             value={values.body}
             onChange={(value) => setValues((current) => ({ ...current, body: value }))}
@@ -1282,6 +1377,8 @@ function HeroTypingShowcase({
             ariaLabel="Compose message"
             rows={5}
             showHelper="idle"
+            touchAccept={false}
+            active
             theme={theme}
           />
         </div>
@@ -1520,6 +1617,13 @@ const DOC_CATEGORIES: DocCategory[] = [
     props: ['onChange', 'onCommit', 'onAccept', 'onDismiss'],
   },
   {
+    id: 'cat-touch',
+    label: 'Touch support',
+    icon: <Hand className="h-5 w-5" />,
+    blurb: 'Tappable controls that let touch users accept the inline hint without a keyboard.',
+    props: ['touchAccept', 'touchAcceptLabel', 'touchAcceptClassName', 'renderTouchAccept'],
+  },
+  {
     id: 'cat-form',
     label: 'Form & native',
     icon: <Clipboard className="h-5 w-5" />,
@@ -1606,15 +1710,14 @@ const PROP_DEMOS: Record<string, PropDemo> = {
 <ForeFill suggestions={suggestions} />`,
   },
   triggerSuggestions: {
-    control: { kind: 'select', options: ['all', 'email', 'happy', 'symbols', 'none'], default: 'all' },
-    render: (value) => (
-      <ForeFill as="input" triggerSuggestions={getTriggersForMode(value as TriggerMode)} suggestions={DEFAULT_SUGGESTIONS} placeholder="Type @g, $t, & sh, or Happy" showHelper="idle" />
-    ),
-    code: (value) =>
-      value === 'none'
-        ? `<ForeFill as="input" suggestions={suggestions} />`
-        : `// '${value}' preset
-<ForeFill as="input" triggerSuggestions={triggers} />`,
+    render: () => <TriggerSuggestionsDemo />,
+    code: () => `const triggerSuggestions = [
+  { trigger: '@', suggestions: ['gmail.com', 'yahoo.com'] },
+  { trigger: '$', suggestions: ['total', 'subtotal'] },
+  { trigger: 'Happy', suggestions: [' Birthday!'] },
+];
+
+<ForeFill as="input" triggerSuggestions={triggerSuggestions} />`,
   },
   asyncSuggestions: {
     control: { kind: 'boolean', default: true },
@@ -1914,6 +2017,95 @@ const PROP_DEMOS: Record<string, PropDemo> = {
     ),
     code: (value) => `<ForeFill as="input" ariaDescribedBy="${value}" showHelper="idle" />`,
   },
+
+  // ----- Touch support ------------------------------------------------------
+  touchAccept: {
+    control: { kind: 'select', options: ['auto', 'true', 'false'], default: 'true' },
+    render: (value) => (
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        touchAccept={value === 'true' ? true : value === 'false' ? false : 'auto'}
+        placeholder="Type 'Thanks' — the accept chip appears with a hint"
+        showHelper="idle"
+      />
+    ),
+    code: (value) =>
+      value === 'auto'
+        ? `<ForeFill touchAccept="auto" suggestions={suggestions} />`
+        : `<ForeFill touchAccept={${value}} suggestions={suggestions} />`,
+  },
+  touchAcceptLabel: {
+    control: { kind: 'text', default: 'Use suggestion' },
+    render: (value) => (
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        touchAccept
+        touchAcceptLabel={String(value)}
+        placeholder="Type 'Thanks' — chip uses this label"
+        showHelper="idle"
+      />
+    ),
+    code: (value) => `<ForeFill touchAccept touchAcceptLabel="${value}" suggestions={suggestions} />`,
+  },
+  touchAcceptClassName: {
+    control: { kind: 'text', default: 'shadow-lg' },
+    render: (value) => (
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        touchAccept
+        touchAcceptClassName={String(value)}
+        placeholder="Type 'Thanks' — chip gets these classes"
+        showHelper="idle"
+      />
+    ),
+    code: (value) => `<ForeFill touchAccept touchAcceptClassName="${value}" suggestions={suggestions} />`,
+  },
+  renderTouchAccept: {
+    control: { kind: 'boolean', default: true },
+    render: (value) => (
+      <ForeFill
+        suggestions={DEFAULT_SUGGESTIONS}
+        touchAccept
+        showHelper="idle"
+        placeholder="Type 'Thanks' — toggle to see a custom chip"
+        renderTouchAccept={
+          value
+            ? ({ accept, suggestion }: TouchAcceptRenderProps) => (
+                <button
+                  type="button"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    accept();
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#6F84B2] bg-white px-3 py-1.5 text-xs font-bold text-[#6F84B2] shadow-sm dark:bg-[#10131A] dark:text-[#A2B2D2]"
+                >
+                  <span aria-hidden>↵</span> {suggestion.slice(0, 24)}
+                  {suggestion.length > 24 ? '…' : ''}
+                </button>
+              )
+            : undefined
+        }
+      />
+    ),
+    code: (value) =>
+      value
+        ? `<ForeFill
+  touchAccept
+  renderTouchAccept={({ accept, suggestion, label }) => (
+    <button
+      type="button"
+      aria-label={label}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        accept();
+      }}
+    >
+      ↵ {suggestion}
+    </button>
+  )}
+/>`
+        : `<ForeFill touchAccept />`,
+  },
 };
 
 function DemoReadout({ label, value }: { label: string; value: string }) {
@@ -1987,6 +2179,24 @@ function CommitOnBlurDemo({ enabled }: { enabled: boolean }) {
         showHelper="idle"
       />
       <DemoReadout label="committed on blur" value={committed} />
+    </div>
+  );
+}
+
+function TriggerSuggestionsDemo() {
+  const [triggers, setTriggers] = useState<ForeFillTriggerSuggestion[]>(() =>
+    cloneTriggers('all')
+  );
+  return (
+    <div className="space-y-3">
+      <TriggerEditor triggers={triggers} setTriggers={setTriggers} />
+      <ForeFill
+        as="input"
+        triggerSuggestions={triggers.length > 0 ? triggers : undefined}
+        suggestions={DEFAULT_SUGGESTIONS}
+        placeholder="Type @g, $t, & sh, Happy, or your own trigger"
+        showHelper="idle"
+      />
     </div>
   );
 }
@@ -2101,6 +2311,7 @@ function PropControlBar({
 function PropSubsection({ name }: { name: string }) {
   const demo = PROP_DEMOS[name];
   const [value, setValue] = useState<DemoValue>(() => demo?.control?.default ?? '');
+  const [isExampleOpen, setIsExampleOpen] = useState(false);
   const prop = PROP_BY_NAME[name];
   if (!prop || !demo) return null;
   return (
@@ -2114,14 +2325,27 @@ function PropSubsection({ name }: { name: string }) {
         <span className="font-semibold text-[#33415C] dark:text-[#CAD3E3]">{prop.desc}</span>{' '}
         {prop.purpose}
       </p>
-      <ExampleCard code={demo.code(value)}>
-        <div className="space-y-3">
-          {demo.control && (
-            <PropControlBar name={name} control={demo.control} value={value} onChange={setValue} />
-          )}
-          {demo.render(value)}
-        </div>
-      </ExampleCard>
+      <button
+        type="button"
+        onClick={() => setIsExampleOpen((open) => !open)}
+        aria-expanded={isExampleOpen}
+        className="inline-flex items-center gap-2 rounded-md border border-[#D7DEE9] bg-[#F8FAFD] px-3 py-2 text-xs font-bold uppercase tracking-wider text-[#526078] transition hover:border-[#6F84B2] hover:text-[#07154D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6F84B2] dark:border-white/10 dark:bg-white/5 dark:text-[#A8B3C7] dark:hover:text-white"
+      >
+        <ChevronDown
+          className={`h-4 w-4 transition-transform duration-200 ${isExampleOpen ? '' : '-rotate-90'}`}
+        />
+        {isExampleOpen ? 'Hide live sample' : 'Show live sample'}
+      </button>
+      {isExampleOpen && (
+        <ExampleCard code={demo.code(value)}>
+          <div className="space-y-3">
+            {demo.control && (
+              <PropControlBar name={name} control={demo.control} value={value} onChange={setValue} />
+            )}
+            {demo.render(value)}
+          </div>
+        </ExampleCard>
+      )}
     </div>
   );
 }
@@ -2494,6 +2718,91 @@ import '${PKG}/styles.css';`}
           </ul>
         </DocSection>
 
+        <DocSection id="touch-support" title="Touch support" icon={<Hand className="h-5 w-5" />}>
+          <p>
+            Touch devices have no <Code>Tab</Code> key and no <Code>Ctrl</Code>/<Code>Cmd</Code> +{' '}
+            <Code>ArrowRight</Code>, so by default ForeFill shows tappable touch controls whenever a
+            coarse pointer is detected:
+          </p>
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {[
+              'An accept chip floating over the field — tap it to accept the whole hint.',
+              'Tappable ghost words — tap a gray word to accept up to (and including) it, the same as pressing Ctrl/Cmd + ArrowRight that many times. Tapping the last word accepts everything.',
+            ].map((item) => (
+              <li key={item} className="rounded-md border border-[#D7DEE9] bg-white p-3 text-sm dark:border-white/10 dark:bg-white/5">
+                {item}
+              </li>
+            ))}
+          </ul>
+          <ExampleCard
+            filename="TouchAccept.tsx"
+            code={`{/* 'auto' (default) shows the controls only on coarse pointers. */}
+<ForeFill suggestions={suggestions} touchAccept="auto" />
+
+{/* Force them on (e.g. for a hybrid touch + mouse device), or off. */}
+<ForeFill suggestions={suggestions} touchAccept />
+<ForeFill suggestions={suggestions} touchAccept={false} />`}
+          >
+            <ForeFill
+              suggestions={DEFAULT_SUGGESTIONS}
+              touchAccept
+              placeholder="Type 'Thanks' — the accept chip is forced on here"
+              showHelper="idle"
+            />
+          </ExampleCard>
+          <p>
+            The controls fire on <Code>pointerdown</Code> and keep focus on the editor, so the soft
+            keyboard stays up and the user can keep typing after accepting. The helper text and the
+            screen-reader announcement switch to touch wording automatically.
+          </p>
+          <ExampleCard
+            filename="CustomTouchAccept.tsx"
+            code={`<ForeFill
+  suggestions={suggestions}
+  touchAccept
+  renderTouchAccept={({ accept, suggestion, label }) => (
+    <button
+      type="button"
+      aria-label={label}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        accept();
+      }}
+    >
+      ↵ {suggestion}
+    </button>
+  )}
+/>`}
+          >
+            <ForeFill
+              suggestions={DEFAULT_SUGGESTIONS}
+              touchAccept
+              placeholder="Type 'Thanks' — custom chip below"
+              showHelper="idle"
+              renderTouchAccept={({ accept, suggestion, label }: TouchAcceptRenderProps) => (
+                <button
+                  type="button"
+                  aria-label={label}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    accept();
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#6F84B2] bg-white px-3 py-1.5 text-xs font-bold text-[#6F84B2] shadow-sm dark:bg-[#10131A] dark:text-[#A2B2D2]"
+                >
+                  <span aria-hidden>↵</span> {suggestion.slice(0, 24)}
+                  {suggestion.length > 24 ? '…' : ''}
+                </button>
+              )}
+            />
+          </ExampleCard>
+          <p>
+            Bring your own control with <Code>renderTouchAccept</Code>. The returned node{' '}
+            <strong>must</strong> call <Code>accept()</Code> from an{' '}
+            <Code>onPointerDown</Code> that calls <Code>preventDefault()</Code>, otherwise the editor
+            blurs and the hint is cleared before the accept runs.
+          </p>
+        </DocSection>
+
         <div className="border-t border-[#E6EBF2] pt-10 dark:border-white/10">
           <p className="text-sm font-black uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
             API reference
@@ -2530,6 +2839,7 @@ function Playground({ theme }: { theme: ThemeMode }) {
   const [suggestions, setSuggestions] = useState(DEFAULT_SUGGESTIONS);
   const [openHelp, setOpenHelp] = useState<string | null>(null);
   const [s, setS] = useState<PlaygroundState>(PLAYGROUND_DEFAULT_STATE);
+  const [outputTab, setOutputTab] = useState<'preview' | 'code'>('preview');
   const eventIdRef = useRef(0);
 
   const set = useCallback(
@@ -2553,15 +2863,29 @@ function Playground({ theme }: { theme: ThemeMode }) {
   }, []);
 
   const applyPreset = useCallback((preset: PlaygroundPreset) => {
-    setS({ ...PLAYGROUND_DEFAULT_STATE, ...preset.state });
+    const base: PlaygroundState = { ...PLAYGROUND_DEFAULT_STATE, ...preset.state };
+    base.triggerSuggestions = base.triggerSuggestions.map((group) => ({
+      ...group,
+      suggestions: [...group.suggestions],
+    }));
+    setS(base);
     setSuggestions(preset.suggestions ?? DEFAULT_SUGGESTIONS);
     setCommitted('');
     setEventLog([]);
   }, []);
 
-  const triggerSuggestions = useMemo(
-    () => getTriggersForMode(s.triggerMode),
-    [s.triggerMode]
+  const setTriggers = useCallback(
+    (
+      next:
+        | ForeFillTriggerSuggestion[]
+        | ((prev: ForeFillTriggerSuggestion[]) => ForeFillTriggerSuggestion[])
+    ) =>
+      setS((prev) => ({
+        ...prev,
+        triggerSuggestions:
+          typeof next === 'function' ? next(prev.triggerSuggestions) : next,
+      })),
+    []
   );
 
   const asyncFetcher = useMemo(
@@ -2595,8 +2919,13 @@ function Playground({ theme }: { theme: ThemeMode }) {
   );
 
   const generatedCode = useMemo(
-    () => buildForeFillCode(s, suggestions, triggerSuggestions),
-    [s, suggestions, triggerSuggestions]
+    () =>
+      buildForeFillCode(
+        s,
+        suggestions,
+        s.triggerSuggestions.length > 0 ? s.triggerSuggestions : undefined
+      ),
+    [s, suggestions]
   );
 
   return (
@@ -2608,6 +2937,10 @@ function Playground({ theme }: { theme: ThemeMode }) {
         <h1 className="mt-1 text-3xl font-black tracking-tight text-[#07154D] dark:text-white">
           Configure every ForeFill API
         </h1>
+        <p className="mt-3 max-w-2xl text-[#526078] dark:text-[#A8B3C7]">
+          Pick a preset, then tune the live preview on the left and browse the settings drawer on
+          the right by category. The generated code updates as you change controls.
+        </p>
       </div>
 
       <Panel title="Use-case presets">
@@ -2630,177 +2963,109 @@ function Playground({ theme }: { theme: ThemeMode }) {
         </div>
       </Panel>
 
-      <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-        <Panel title="Preview">
-          <ForeFill
-            as={s.as}
-            suggestions={suggestions}
-            triggerSuggestions={triggerSuggestions}
-            asyncSuggestions={asyncFetcher}
-            variant={s.variant}
-            size={s.size}
-            matchMode={s.matchMode}
-            matchWholeValue={s.matchWholeValue}
-            minQueryLength={s.minQueryLength}
-            debounceMs={s.debounceMs}
-            disableInlineFill={s.disableInlineFill}
-            enableArrowNavigation={s.enableArrowNavigation}
-            acceptOnEnter={s.acceptOnEnter}
-            commitOnBlur={s.commitOnBlur}
-            partialAccept={s.partialAccept}
-            showHelper={
-              s.showHelper === 'true'
-                ? true
-                : s.showHelper === 'false'
-                  ? false
-                  : 'idle'
-            }
-            helperIdleMs={s.helperIdleMs}
-            helperText={s.helperText || undefined}
-            status={s.status === 'idle' ? undefined : s.status}
-            placeholder={s.placeholder}
-            rows={s.rows}
-            inputType={s.inputType}
-            ariaLabel={s.ariaLabel || undefined}
-            name={s.name || undefined}
-            id={s.id || undefined}
-            required={s.required}
-            readOnly={s.readOnly}
-            maxLength={s.maxLength > 0 ? s.maxLength : undefined}
-            autoFocus={s.autoFocus}
-            disabled={s.disabled}
-            theme={s.themeChoice === 'auto' ? theme : s.themeChoice}
-            className={s.as === 'contenteditable' ? 'ff-contenteditable-demo' : undefined}
-            editorClassName={s.as === 'contenteditable' ? 'ff-contenteditable-demo__editor' : undefined}
-            onChange={(value) => recordEvent('onChange', value)}
-            onCommit={(value) => {
-              setCommitted(value);
-              recordEvent('onCommit', value);
-            }}
-            onAccept={(_value, suggestion) =>
-              recordEvent('onAccept', suggestion)
-            }
-            onDismiss={() => recordEvent('onDismiss')}
-          />
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <StatusBox label="Committed value" value={committed || 'none'} />
-            <EventLog events={eventLog} />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+        <section className="overflow-hidden rounded-md border border-[#D7DEE9] bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
+          <div
+            role="tablist"
+            aria-label="Output view"
+            className="flex items-center gap-1 border-b border-[#E6EBF2] bg-[#F8FAFD] px-2 py-1.5 dark:border-white/10 dark:bg-white/[0.03]"
+          >
+            {(['preview', 'code'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={outputTab === value ? 'true' : 'false'}
+                onClick={() => setOutputTab(value)}
+                className={`rounded-md px-3 py-1 text-xs font-bold capitalize transition ${
+                  outputTab === value
+                    ? 'bg-white text-[#07154D] shadow-sm dark:bg-white/10 dark:text-white'
+                    : 'text-[#708096] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:text-white'
+                }`}
+              >
+                {value}
+              </button>
+            ))}
+            <span className="ml-auto pr-1 text-[10px] font-bold uppercase tracking-wider text-[#9AA7BC] dark:text-[#7C8AA3]">
+              {outputTab === 'preview' ? 'Live example' : 'Generated'}
+            </span>
           </div>
-        </Panel>
+          {outputTab === 'preview' ? (
+            <div className="p-4">
+              <ForeFill
+                as={s.as}
+                suggestions={suggestions}
+                triggerSuggestions={s.triggerSuggestions.length > 0 ? s.triggerSuggestions : undefined}
+                asyncSuggestions={asyncFetcher}
+                variant={s.variant}
+                size={s.size}
+                matchMode={s.matchMode}
+                matchWholeValue={s.matchWholeValue}
+                minQueryLength={s.minQueryLength}
+                debounceMs={s.debounceMs}
+                disableInlineFill={s.disableInlineFill}
+                enableArrowNavigation={s.enableArrowNavigation}
+                acceptOnEnter={s.acceptOnEnter}
+                commitOnBlur={s.commitOnBlur}
+                partialAccept={s.partialAccept}
+                showHelper={
+                  s.showHelper === 'true'
+                    ? true
+                    : s.showHelper === 'false'
+                      ? false
+                      : 'idle'
+                }
+                helperIdleMs={s.helperIdleMs}
+                helperText={s.helperText || undefined}
+                status={s.status === 'idle' ? undefined : s.status}
+                placeholder={s.placeholder}
+                rows={s.rows}
+                inputType={s.inputType}
+                ariaLabel={s.ariaLabel || undefined}
+                name={s.name || undefined}
+                id={s.id || undefined}
+                required={s.required}
+                readOnly={s.readOnly}
+                maxLength={s.maxLength > 0 ? s.maxLength : undefined}
+                autoFocus={s.autoFocus}
+                disabled={s.disabled}
+                touchAccept={
+                  s.touchAccept === 'true' ? true : s.touchAccept === 'false' ? false : 'auto'
+                }
+                touchAcceptLabel={s.touchAcceptLabel || undefined}
+                theme={s.themeChoice === 'auto' ? theme : s.themeChoice}
+                className={s.as === 'contenteditable' ? 'ff-contenteditable-demo' : undefined}
+                editorClassName={s.as === 'contenteditable' ? 'ff-contenteditable-demo__editor' : undefined}
+                onChange={(value) => recordEvent('onChange', value)}
+                onCommit={(value) => {
+                  setCommitted(value);
+                  recordEvent('onCommit', value);
+                }}
+                onAccept={(_value, suggestion) =>
+                  recordEvent('onAccept', suggestion)
+                }
+                onDismiss={() => recordEvent('onDismiss')}
+              />
+              <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <StatusBox label="Committed value" value={committed || 'none'} />
+                <EventLog events={eventLog} />
+              </div>
+            </div>
+          ) : (
+            <CodeBlock filename="App.tsx" code={generatedCode} compact />
+          )}
+        </section>
 
-        <Panel title="Generated code">
-          <CodeBlock filename="App.tsx" code={generatedCode} compact />
-        </Panel>
+        <SettingsDrawer
+          s={s}
+          set={set}
+          openHelp={openHelp}
+          setOpenHelp={setOpenHelp}
+          suggestions={suggestions}
+          setSuggestions={setSuggestions}
+          setTriggers={setTriggers}
+        />
       </div>
-
-      <Panel title="Controls">
-        <div className="space-y-7">
-          <ControlGroup title="Surface">
-            <Control name="as" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.as} onChange={(value) => set('as', value as ForeFillSurface)} options={['textarea', 'input', 'contenteditable']} />
-            </Control>
-            <Control name="rows" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <NumberInput value={s.rows} min={1} max={12} onChange={(value) => set('rows', Math.max(1, value))} />
-            </Control>
-            <Control name="inputType" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.inputType} onChange={(value) => set('inputType', value)} options={['text', 'email', 'search', 'url', 'tel', 'password']} />
-            </Control>
-            <Control name="placeholder" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <TextInput value={s.placeholder} onChange={(value) => set('placeholder', value)} />
-            </Control>
-            <Control name="ariaLabel" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <TextInput value={s.ariaLabel} onChange={(value) => set('ariaLabel', value)} />
-            </Control>
-          </ControlGroup>
-
-          <ControlGroup title="Suggestions">
-            <Control name="triggerSuggestions" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.triggerMode} onChange={(value) => set('triggerMode', value as TriggerMode)} options={['all', 'email', 'happy', 'symbols', 'none']} />
-            </Control>
-            <Control name="suggestions" openHelp={openHelp} setOpenHelp={setOpenHelp} wide>
-              <SuggestionEditor suggestions={suggestions} setSuggestions={setSuggestions} />
-            </Control>
-            <Control name="asyncSuggestions" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Toggle checked={s.asyncMode} onChange={(value) => set('asyncMode', value)} labels={['on', 'off']} />
-            </Control>
-          </ControlGroup>
-
-          <ControlGroup title="Matching">
-            <Control name="matchMode" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.matchMode} onChange={(value) => set('matchMode', value as ForeFillMatchMode)} options={['substring', 'startsWith']} />
-            </Control>
-            <Control name="matchWholeValue" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Toggle checked={s.matchWholeValue} onChange={(value) => set('matchWholeValue', value)} labels={['on', 'off']} />
-            </Control>
-            <Control name="minQueryLength" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <NumberInput value={s.minQueryLength} min={1} max={10} onChange={(value) => set('minQueryLength', Math.max(1, value))} />
-            </Control>
-            <Control name="debounceMs" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <NumberInput value={s.debounceMs} min={0} max={2000} onChange={(value) => set('debounceMs', Math.max(0, value))} />
-            </Control>
-          </ControlGroup>
-
-          <ControlGroup title="Behavior">
-            {[
-              ['disableInlineFill', s.disableInlineFill, (value: boolean) => set('disableInlineFill', value)],
-              ['enableArrowNavigation', s.enableArrowNavigation, (value: boolean) => set('enableArrowNavigation', value)],
-              ['acceptOnEnter', s.acceptOnEnter, (value: boolean) => set('acceptOnEnter', value)],
-              ['commitOnBlur', s.commitOnBlur, (value: boolean) => set('commitOnBlur', value)],
-              ['partialAccept', s.partialAccept, (value: boolean) => set('partialAccept', value)],
-            ].map(([name, checked, onChange]) => (
-              <Control key={name as string} name={name as string} openHelp={openHelp} setOpenHelp={setOpenHelp}>
-                <Toggle checked={checked as boolean} onChange={onChange as (value: boolean) => void} labels={['on', 'off']} />
-              </Control>
-            ))}
-          </ControlGroup>
-
-          <ControlGroup title="Helper and Status">
-            <Control name="showHelper" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.showHelper} onChange={(value) => set('showHelper', value as ShowHelperMode)} options={['idle', 'true', 'false']} />
-            </Control>
-            <Control name="helperIdleMs" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <NumberInput value={s.helperIdleMs} min={0} max={5000} onChange={(value) => set('helperIdleMs', Math.max(0, value))} />
-            </Control>
-            <Control name="helperText" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <TextInput value={s.helperText} placeholder="built-in" onChange={(value) => set('helperText', value)} />
-            </Control>
-            <Control name="status" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.status} onChange={(value) => set('status', value as StatusMode)} options={['idle', 'loading', 'success', 'error']} />
-            </Control>
-          </ControlGroup>
-
-          <ControlGroup title="Appearance and Form">
-            <Control name="variant" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.variant} onChange={(value) => set('variant', value as ForeFillVariant)} options={['outline', 'filled', 'underline']} />
-            </Control>
-            <Control name="size" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.size} onChange={(value) => set('size', value as ForeFillSize)} options={['sm', 'md', 'lg']} />
-            </Control>
-            <Control name="theme" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <Select value={s.themeChoice} onChange={(value) => set('themeChoice', value as ThemeChoice)} options={['auto', 'light', 'dark']} />
-            </Control>
-            <Control name="name" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <TextInput value={s.name} onChange={(value) => set('name', value)} />
-            </Control>
-            <Control name="id" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <TextInput value={s.id} onChange={(value) => set('id', value)} />
-            </Control>
-            <Control name="maxLength" openHelp={openHelp} setOpenHelp={setOpenHelp}>
-              <NumberInput value={s.maxLength} min={0} max={1000} onChange={(value) => set('maxLength', Math.max(0, value))} />
-            </Control>
-            {[
-              ['required', s.required, (value: boolean) => set('required', value)],
-              ['readOnly', s.readOnly, (value: boolean) => set('readOnly', value)],
-              ['autoFocus', s.autoFocus, (value: boolean) => set('autoFocus', value)],
-              ['disabled', s.disabled, (value: boolean) => set('disabled', value)],
-            ].map(([name, checked, onChange]) => (
-              <Control key={name as string} name={name as string} openHelp={openHelp} setOpenHelp={setOpenHelp}>
-                <Toggle checked={checked as boolean} onChange={onChange as (value: boolean) => void} labels={['on', 'off']} />
-              </Control>
-            ))}
-          </ControlGroup>
-        </div>
-      </Panel>
 
       <Panel title="API Reference">
         <div className="overflow-x-auto">
@@ -2842,9 +3107,218 @@ function Playground({ theme }: { theme: ThemeMode }) {
   );
 }
 
-function getTriggersForMode(mode: TriggerMode): ForeFillTriggerSuggestion[] | undefined {
-  if (mode === 'none') return undefined;
-  return TRIGGER_PRESETS[mode];
+type SettingsTabId = 'surface' | 'suggestions' | 'matching' | 'behavior' | 'helper' | 'appearance';
+
+interface SettingsDrawerProps {
+  s: PlaygroundState;
+  set: <K extends keyof PlaygroundState>(key: K, value: PlaygroundState[K]) => void;
+  openHelp: string | null;
+  setOpenHelp: (name: string | null) => void;
+  suggestions: string[];
+  setSuggestions: (next: string[] | ((prev: string[]) => string[])) => void;
+  setTriggers: (
+    next:
+      | ForeFillTriggerSuggestion[]
+      | ((prev: ForeFillTriggerSuggestion[]) => ForeFillTriggerSuggestion[])
+  ) => void;
+}
+
+function SettingsDrawer({
+  s,
+  set,
+  openHelp,
+  setOpenHelp,
+  suggestions,
+  setSuggestions,
+  setTriggers,
+}: SettingsDrawerProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('surface');
+
+  const tabs: Array<{ id: SettingsTabId; label: string; content: ReactNode }> = [
+    {
+      id: 'surface',
+      label: 'Surface',
+      content: (
+        <ControlGroup title="Surface">
+          <Control name="as" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.as} onChange={(value) => set('as', value as ForeFillSurface)} options={['textarea', 'input', 'contenteditable']} />
+          </Control>
+          <Control name="rows" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <NumberInput value={s.rows} min={1} max={12} onChange={(value) => set('rows', Math.max(1, value))} />
+          </Control>
+          <Control name="inputType" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.inputType} onChange={(value) => set('inputType', value)} options={['text', 'email', 'search', 'url', 'tel', 'password']} />
+          </Control>
+          <Control name="placeholder" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <TextInput value={s.placeholder} onChange={(value) => set('placeholder', value)} />
+          </Control>
+          <Control name="ariaLabel" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <TextInput value={s.ariaLabel} onChange={(value) => set('ariaLabel', value)} />
+          </Control>
+        </ControlGroup>
+      ),
+    },
+    {
+      id: 'suggestions',
+      label: 'Suggestions',
+      content: (
+        <ControlGroup title="Suggestions">
+          <Control name="triggerSuggestions" openHelp={openHelp} setOpenHelp={setOpenHelp} wide>
+            <TriggerEditor triggers={s.triggerSuggestions} setTriggers={setTriggers} />
+          </Control>
+          <Control name="suggestions" openHelp={openHelp} setOpenHelp={setOpenHelp} wide>
+            <SuggestionEditor suggestions={suggestions} setSuggestions={setSuggestions} />
+          </Control>
+          <Control name="asyncSuggestions" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Toggle checked={s.asyncMode} onChange={(value) => set('asyncMode', value)} labels={['on', 'off']} />
+          </Control>
+        </ControlGroup>
+      ),
+    },
+    {
+      id: 'matching',
+      label: 'Matching',
+      content: (
+        <ControlGroup title="Matching">
+          <Control name="matchMode" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.matchMode} onChange={(value) => set('matchMode', value as ForeFillMatchMode)} options={['substring', 'startsWith']} />
+          </Control>
+          <Control name="matchWholeValue" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Toggle checked={s.matchWholeValue} onChange={(value) => set('matchWholeValue', value)} labels={['on', 'off']} />
+          </Control>
+          <Control name="minQueryLength" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <NumberInput value={s.minQueryLength} min={1} max={10} onChange={(value) => set('minQueryLength', Math.max(1, value))} />
+          </Control>
+          <Control name="debounceMs" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <NumberInput value={s.debounceMs} min={0} max={2000} onChange={(value) => set('debounceMs', Math.max(0, value))} />
+          </Control>
+        </ControlGroup>
+      ),
+    },
+    {
+      id: 'behavior',
+      label: 'Behavior',
+      content: (
+        <ControlGroup title="Behavior">
+          {([
+            ['disableInlineFill', s.disableInlineFill, (value: boolean) => set('disableInlineFill', value)],
+            ['enableArrowNavigation', s.enableArrowNavigation, (value: boolean) => set('enableArrowNavigation', value)],
+            ['acceptOnEnter', s.acceptOnEnter, (value: boolean) => set('acceptOnEnter', value)],
+            ['commitOnBlur', s.commitOnBlur, (value: boolean) => set('commitOnBlur', value)],
+            ['partialAccept', s.partialAccept, (value: boolean) => set('partialAccept', value)],
+          ] as Array<[string, boolean, (value: boolean) => void]>).map(([name, checked, onChange]) => (
+            <Control key={name} name={name} openHelp={openHelp} setOpenHelp={setOpenHelp}>
+              <Toggle checked={checked} onChange={onChange} labels={['on', 'off']} />
+            </Control>
+          ))}
+          <Control name="touchAccept" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.touchAccept} onChange={(value) => set('touchAccept', value as TouchAcceptMode)} options={['auto', 'true', 'false']} />
+          </Control>
+          <Control name="touchAcceptLabel" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <TextInput value={s.touchAcceptLabel} onChange={(value) => set('touchAcceptLabel', value)} />
+          </Control>
+        </ControlGroup>
+      ),
+    },
+    {
+      id: 'helper',
+      label: 'Helper & Status',
+      content: (
+        <ControlGroup title="Helper and Status">
+          <Control name="showHelper" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.showHelper} onChange={(value) => set('showHelper', value as ShowHelperMode)} options={['idle', 'true', 'false']} />
+          </Control>
+          <Control name="helperIdleMs" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <NumberInput value={s.helperIdleMs} min={0} max={5000} onChange={(value) => set('helperIdleMs', Math.max(0, value))} />
+          </Control>
+          <Control name="helperText" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <TextInput value={s.helperText} placeholder="built-in" onChange={(value) => set('helperText', value)} />
+          </Control>
+          <Control name="status" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.status} onChange={(value) => set('status', value as StatusMode)} options={['idle', 'loading', 'success', 'error']} />
+          </Control>
+        </ControlGroup>
+      ),
+    },
+    {
+      id: 'appearance',
+      label: 'Appearance & Form',
+      content: (
+        <ControlGroup title="Appearance and Form">
+          <Control name="variant" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.variant} onChange={(value) => set('variant', value as ForeFillVariant)} options={['outline', 'filled', 'underline']} />
+          </Control>
+          <Control name="size" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.size} onChange={(value) => set('size', value as ForeFillSize)} options={['sm', 'md', 'lg']} />
+          </Control>
+          <Control name="theme" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <Select value={s.themeChoice} onChange={(value) => set('themeChoice', value as ThemeChoice)} options={['auto', 'light', 'dark']} />
+          </Control>
+          <Control name="name" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <TextInput value={s.name} onChange={(value) => set('name', value)} />
+          </Control>
+          <Control name="id" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <TextInput value={s.id} onChange={(value) => set('id', value)} />
+          </Control>
+          <Control name="maxLength" openHelp={openHelp} setOpenHelp={setOpenHelp}>
+            <NumberInput value={s.maxLength} min={0} max={1000} onChange={(value) => set('maxLength', Math.max(0, value))} />
+          </Control>
+          {([
+            ['required', s.required, (value: boolean) => set('required', value)],
+            ['readOnly', s.readOnly, (value: boolean) => set('readOnly', value)],
+            ['autoFocus', s.autoFocus, (value: boolean) => set('autoFocus', value)],
+            ['disabled', s.disabled, (value: boolean) => set('disabled', value)],
+          ] as Array<[string, boolean, (value: boolean) => void]>).map(([name, checked, onChange]) => (
+            <Control key={name} name={name} openHelp={openHelp} setOpenHelp={setOpenHelp}>
+              <Toggle checked={checked} onChange={onChange} labels={['on', 'off']} />
+            </Control>
+          ))}
+        </ControlGroup>
+      ),
+    },
+  ];
+
+  const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
+
+  return (
+    <aside className="lg:sticky lg:top-24">
+      <section className="rounded-md border border-[#D7DEE9] bg-white p-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+        <div className="mb-3 flex items-center gap-2">
+          <SlidersHorizontal className="h-4 w-4 text-[#6F84B2] dark:text-[#A2B2D2]" />
+          <h2 className="text-sm font-black uppercase tracking-wider text-[#526078] dark:text-[#A8B3C7]">
+            Settings
+          </h2>
+        </div>
+        <div
+          role="tablist"
+          aria-label="Settings categories"
+          className="flex gap-1 overflow-x-auto rounded-md border border-[#E6EBF2] bg-[#F8FAFD] p-1 dark:border-white/10 dark:bg-white/[0.03] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id ? 'true' : 'false'}
+              onClick={() => setActiveTab(tab.id)}
+              className={`shrink-0 rounded px-3 py-1.5 text-xs font-bold transition ${
+                activeTab === tab.id
+                  ? 'bg-white text-[#07154D] shadow-sm dark:bg-white/10 dark:text-white'
+                  : 'text-[#708096] hover:text-[#07154D] dark:text-[#A8B3C7] dark:hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-4">{active.content}</div>
+      </section>
+    </aside>
+  );
+}
+
+function cloneTriggers(mode: Exclude<TriggerMode, 'none'>): ForeFillTriggerSuggestion[] {
+  return TRIGGER_PRESETS[mode].map((group) => ({ ...group, suggestions: [...group.suggestions] }));
 }
 
 function buildForeFillCode(
@@ -2890,6 +3364,9 @@ function buildForeFillCode(
   if (s.maxLength > 0) raw('maxLength', String(s.maxLength));
   if (s.autoFocus) flag('autoFocus');
   if (s.disabled) flag('disabled');
+  if (s.touchAccept === 'true') flag('touchAccept');
+  else if (s.touchAccept === 'false') raw('touchAccept', 'false');
+  if (s.touchAcceptLabel && s.touchAcceptLabel !== 'Accept suggestion') str('touchAcceptLabel', s.touchAcceptLabel);
   raw('value', 'value');
   raw('onChange', 'setValue');
   raw('onCommit', "(nextValue) => console.log('committed', nextValue)");
@@ -2975,7 +3452,7 @@ function ControlGroup({ title, children }: { title: string; children: ReactNode 
       <legend className="mb-3 text-xs font-black uppercase tracking-wider text-[#6F84B2] dark:text-[#A2B2D2]">
         {title}
       </legend>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{children}</div>
+      <div className="grid gap-3 sm:grid-cols-2">{children}</div>
     </fieldset>
   );
 }
@@ -2995,7 +3472,7 @@ function Control({
 }) {
   const prop = API_PROPS.find((item) => item.name === name);
   return (
-    <div className={`group relative flex flex-col gap-1.5 ${wide ? 'sm:col-span-2 lg:col-span-3' : ''}`}>
+    <div className={`group relative flex flex-col gap-1.5 ${wide ? 'sm:col-span-2' : ''}`}>
       <div className="flex min-h-5 items-center gap-1.5">
         <span className="text-xs font-bold uppercase tracking-wider text-[#526078] dark:text-[#A8B3C7]">
           {name}
@@ -3182,6 +3659,128 @@ function SuggestionEditor({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function TriggerEditor({
+  triggers,
+  setTriggers,
+}: {
+  triggers: ForeFillTriggerSuggestion[];
+  setTriggers: (
+    next:
+      | ForeFillTriggerSuggestion[]
+      | ((prev: ForeFillTriggerSuggestion[]) => ForeFillTriggerSuggestion[])
+  ) => void;
+}) {
+  const updateGroup = (index: number, patch: Partial<ForeFillTriggerSuggestion>) =>
+    setTriggers((prev) => prev.map((group, i) => (i === index ? { ...group, ...patch } : group)));
+  const removeGroup = (index: number) =>
+    setTriggers((prev) => prev.filter((_, i) => i !== index));
+  const addGroup = () =>
+    setTriggers((prev) => [...prev, { trigger: '', suggestions: [] }]);
+  const addSuggestion = (index: number, value: string) =>
+    setTriggers((prev) =>
+      prev.map((group, i) =>
+        i === index
+          ? { ...group, suggestions: group.suggestions.includes(value) ? group.suggestions : [...group.suggestions, value] }
+          : group
+      )
+    );
+  const removeSuggestion = (index: number, suggestion: string) =>
+    setTriggers((prev) =>
+      prev.map((group, i) =>
+        i === index
+          ? { ...group, suggestions: group.suggestions.filter((item) => item !== suggestion) }
+          : group
+      )
+    );
+
+  return (
+    <div className="space-y-3">
+      {triggers.length === 0 && (
+        <p className="text-xs text-[#9AA7BC] dark:text-[#7C8AA3]">
+          No triggers yet. Add one below (e.g. <code className="font-mono">@</code>,{' '}
+          <code className="font-mono">$</code>, or a word like <code className="font-mono">Happy</code>).
+        </p>
+      )}
+      {triggers.map((group, index) => (
+        <div
+          key={index}
+          className="space-y-2 rounded-md border border-[#D7DEE9] bg-[#F7F8FB] p-2.5 dark:border-white/10 dark:bg-white/5"
+        >
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 font-mono text-[10px] font-black uppercase tracking-wider text-[#708096] dark:text-[#A8B3C7]">
+              trigger
+            </span>
+            <input
+              type="text"
+              value={group.trigger}
+              onChange={(event) => updateGroup(index, { trigger: event.target.value })}
+              placeholder="@, $, Happy"
+              className={`${INPUT_CLASS} min-w-0 flex-1`}
+              aria-label={`Trigger ${index + 1} text`}
+            />
+            <button
+              type="button"
+              onClick={() => removeGroup(index)}
+              aria-label={`Remove trigger ${index + 1}`}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[#D7DEE9] text-[#708096] transition hover:border-[#FF6B6B] hover:text-[#FF6B6B] dark:border-white/10 dark:text-[#A8B3C7]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <form
+            className="flex gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const input = event.currentTarget.elements.namedItem('suggestion') as HTMLInputElement | null;
+              const value = input?.value;
+              if (!value) return;
+              addSuggestion(index, value);
+              if (input) input.value = '';
+            }}
+          >
+            <input
+              name="suggestion"
+              type="text"
+              placeholder="Add completion (leading space kept)"
+              className={`${INPUT_CLASS} min-w-0 flex-1`}
+              aria-label={`Add suggestion to trigger ${index + 1}`}
+            />
+            <button
+              type="submit"
+              className="shrink-0 rounded-md bg-[#6F84B2] px-3 text-sm font-bold text-white transition hover:bg-[#5A6F9C]"
+            >
+              Add
+            </button>
+          </form>
+          {group.suggestions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {group.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => removeSuggestion(index, suggestion)}
+                  className="inline-flex max-w-[12rem] items-center gap-1 truncate rounded-md border border-[#D7DEE9] bg-white px-2 py-1 text-left text-xs text-[#526078] transition hover:border-[#FF6B6B] hover:text-[#FF6B6B] dark:border-white/10 dark:bg-white/5 dark:text-[#A8B3C7]"
+                  title="Remove suggestion"
+                >
+                  <span className="truncate">{suggestion}</span>
+                  <X className="h-3 w-3 shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addGroup}
+        className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-[#6F84B2] px-3 py-2 text-xs font-bold text-[#6F84B2] transition hover:bg-[#6F84B2]/10 dark:text-[#A2B2D2] dark:hover:bg-white/10"
+      >
+        + Add trigger
+      </button>
     </div>
   );
 }

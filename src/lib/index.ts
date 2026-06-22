@@ -14,6 +14,7 @@ export type {
   ForeFillTriggerSuggestion,
   HelperVisibility,
   ForeFillSurface,
+  TouchAcceptRenderProps,
 } from './ForeFill';
 
 // Hooks (reusable across future components)

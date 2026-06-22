@@ -87,6 +87,13 @@
   --ff-key-font-size: var(--ff-helper-key-font-size, 0.82em);
   --ff-key-font-weight: var(--ff-helper-key-font-weight, 600);
 
+  /* ----- Touch accept chip sizing --------------------------------------- */
+  /* Target size for the floating accept chip. 44px meets WCAG 2.5.5; the
+     default is smaller to stay unobtrusive — raise it to 44px for strict
+     target-size compliance. The glyph is the ↵ inside the chip. */
+  --ff-touch-accept-size: 34px;
+  --ff-touch-accept-glyph-size: 0.85em;
+
   /* ----- Sizing defaults (= size "md"); overridden by [data-size] below -- */
   --ff-padding-y: 0.6rem;
   --ff-padding-x: 0.85rem;
@@ -337,6 +344,74 @@
   color: var(--ff-text);
 }
 
+/* ----- Touch accept controls -------------------------------------------- */
+/* When touch controls are live the ghost layer is raised above the editor so
+   its word spans can receive taps. The container stays pointer-events:none and
+   only `.ff-ghost-word` opts back in, so the transparent prefix/typed regions
+   still let taps fall through to the editor for caret placement. */
+.ff-root[data-touch-accept="true"] .ff-ghost {
+  z-index: 2;
+}
+.ff-root[data-touch-accept="true"] .ff-ghost-word {
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 4px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.ff-root[data-touch-accept="true"] .ff-ghost-word:active {
+  background: var(--ff-accent-soft);
+  color: var(--ff-accent);
+}
+
+.ff-touch-accept {
+  position: absolute;
+  right: max(6px, calc(var(--ff-padding-x) - 0.4rem));
+  bottom: max(6px, calc(var(--ff-padding-y) - 0.4rem));
+  z-index: 3; /* above ghost (2) and editor (1) */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--ff-touch-accept-size);
+  min-height: var(--ff-touch-accept-size);
+  padding: 0;
+  border: var(--ff-border-width) solid var(--ff-accent);
+  border-radius: var(--ff-radius);
+  background: var(--ff-accent-soft);
+  color: var(--ff-accent);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: manipulation;
+  transition: background-color var(--ff-duration-fast) var(--ff-ease),
+    transform var(--ff-duration-fast) var(--ff-ease);
+}
+.ff-touch-accept:active {
+  background: var(--ff-accent);
+  color: var(--ff-bg);
+  transform: scale(0.96);
+}
+.ff-touch-accept-glyph {
+  font-size: var(--ff-touch-accept-glyph-size);
+  font-weight: 700;
+}
+.ff-root[data-surface="input"] .ff-touch-accept {
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+}
+.ff-root[data-surface="input"] .ff-touch-accept:active {
+  transform: translateY(-50%) scale(0.96);
+}
+@media (forced-colors: active) {
+  .ff-touch-accept {
+    border: 1px solid ButtonText;
+    color: ButtonText;
+  }
+}
+
 /* ----- Editable surfaces ------------------------------------------------ */
 .ff-editor {
   position: relative;
@@ -535,6 +610,7 @@
   .ff-editor,
   .ff-ghost,
   .ff-helper,
+  .ff-touch-accept,
   .ff-root[data-variant="underline"] .ff-field::after {
     transition: none;
     animation: none;

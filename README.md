@@ -296,6 +296,7 @@ Notes:
 | `ArrowUp` | Preview the previous matching hint |
 | `Shift+Enter` | Insert a new line |
 | `Escape` | Hide the current hint and keep the typed text |
+| Tap the accept chip / a ghost word (touch) | Accept the whole hint, or accept up to a word (see [Touch Support](#touch-support)) |
 | Click away | Hide the hint and keep the typed text |
 
 ## Arrow Navigation
@@ -644,6 +645,53 @@ the suggestion). For `substring` matches that have text *before* the typed
 portion, `Ctrl`/`Cmd` + `ArrowRight` falls through to the browser's normal word
 navigation.
 
+## Touch Support
+
+Touch devices have no `Tab` key and no `Ctrl`/`Cmd` + `ArrowRight`, so by default
+ForeFill shows tappable touch controls whenever a coarse pointer is detected:
+
+- An **accept chip** floating over the field — tap it to accept the whole hint.
+- **Tappable ghost words** — tap a gray word to accept up to (and including) it,
+  the same as pressing `Ctrl`/`Cmd` + `ArrowRight` that many times. Tapping the
+  last word accepts everything. (Gated by `partialAccept`; start-anchored hints
+  only — a prefixed `substring` hint accepts in full on tap.)
+
+```tsx
+// 'auto' (default) shows the controls only on coarse pointers.
+<ForeFill suggestions={suggestions} touchAccept="auto" />
+
+// Force them on (e.g. for a hybrid touch + mouse device), or off.
+<ForeFill suggestions={suggestions} touchAccept />
+<ForeFill suggestions={suggestions} touchAccept={false} />
+```
+
+The controls fire on `pointerdown` and keep focus on the editor, so the soft
+keyboard stays up and you can keep typing after accepting. The helper text and
+the screen-reader announcement switch to touch wording automatically.
+
+Bring your own control with `renderTouchAccept`. The returned node **must** call
+`accept()` from an `onPointerDown` that calls `preventDefault()`, otherwise the
+editor blurs and the hint is cleared before the accept runs:
+
+```tsx
+<ForeFill
+  suggestions={suggestions}
+  touchAccept
+  renderTouchAccept={({ accept, suggestion, label }) => (
+    <button
+      type="button"
+      aria-label={label}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        accept();
+      }}
+    >
+      ↵ {suggestion}
+    </button>
+  )}
+/>
+```
+
 ## Disable Inline Fill
 
 Use this when you want the editable surface without ghost hints.
@@ -762,6 +810,8 @@ in your own stylesheet to re-skin the component.
 | `--ff-key-radius` | Keycap border radius |
 | `--ff-key-font-size` | Keycap text size |
 | `--ff-key-font-weight` | Keycap font weight |
+| `--ff-touch-accept-size` | Touch accept chip target size (default `34px`; set to `44px` for WCAG 2.5.5) |
+| `--ff-touch-accept-glyph-size` | Touch accept chip glyph (↵) text size |
 | `--ff-font` | Font family |
 | `--ff-padding-y` | Vertical padding |
 | `--ff-padding-x` | Horizontal padding |
@@ -811,7 +861,12 @@ Every public prop below includes its use and a short example.
 | `onDismiss` | `() => void` | Runs when Escape hides a visible hint. | `<ForeFill onDismiss={() => track('dismissed')} />` |
 | `acceptOnEnter` | `boolean`, default `true` | When false, Enter commits typed text and Tab accepts hints. | `<ForeFill acceptOnEnter={false} />` |
 | `commitOnBlur` | `boolean`, default `false` | Commits the current value when focus leaves the field. | `<ForeFill commitOnBlur onCommit={save} />` |
-| `partialAccept` | `boolean`, default `true` | Lets users accept one word with Ctrl/Cmd + ArrowRight. | `<ForeFill partialAccept={false} />` |
+| `partialAccept` | `boolean`, default `true` | Lets users accept one word with Ctrl/Cmd + ArrowRight (and by tapping a ghost word on touch). | `<ForeFill partialAccept={false} />` |
+| `touchAccept` | `boolean \| 'auto'`, default `'auto'` | Shows tappable touch controls (accept chip + ghost words). `'auto'` = coarse pointers only; `true`/`false` force on/off. | `<ForeFill touchAccept />` |
+| `touchAcceptLabel` | `string`, default `'Accept suggestion'` | Accessible label for the accept chip. | `<ForeFill touchAcceptLabel="Use suggestion" />` |
+| `touchAcceptClassName` | `string` | Extra classes merged onto the accept chip. | `<ForeFill touchAcceptClassName="my-chip" />` |
+| `renderTouchAccept` | `(api: TouchAcceptRenderProps) => ReactNode` | Render your own accept control; call `accept()` from a `preventDefault`-ed `onPointerDown`. | See [Touch Support](#touch-support) |
+| `active` | `boolean`, default `false` | Renders the inline ghost as if focused without stealing DOM focus (avoids opening the soft keyboard on touch). For showcase/preview scenarios with an externally driven value. | `<ForeFill active value={value} suggestions={suggestions} />` |
 
 ### Helper, Status, And Accessibility
 

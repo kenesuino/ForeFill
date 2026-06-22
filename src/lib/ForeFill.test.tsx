@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type FormEvent } from 'react';
@@ -1008,5 +1008,277 @@ describe('ForeFill — controlled mode', () => {
     const field = screen.getByRole('textbox') as HTMLTextAreaElement;
     await user.type(field, 'Happy');
     expect(field.value).toBe('Happy');
+  });
+});
+
+describe('ForeFill — touch accept', () => {
+  // jsdom has no matchMedia; stub it so `touchAccept: 'auto'` can be exercised.
+  function mockCoarsePointer(matches: boolean) {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('coarse') ? matches : false,
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      onchange: null,
+      dispatchEvent: () => false,
+    }));
+  }
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ACCEPT = /accept suggestion/i;
+
+  function ghostWords(): HTMLElement[] {
+    return Array.from(document.querySelectorAll('.ff-ghost-word'));
+  }
+
+  it('renders the accept chip when touchAccept is on and a ghost is showing', async () => {
+    const user = userEvent.setup();
+    render(<ForeFill suggestions={REPLIES} touchAccept placeholder="Reply" />);
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    expect(screen.getByRole('button', { name: ACCEPT })).toBeInTheDocument();
+  });
+
+  it('does not render the chip when there is no ghost', async () => {
+    const user = userEvent.setup();
+    render(<ForeFill suggestions={REPLIES} touchAccept placeholder="Reply" />);
+    await user.click(screen.getByRole('textbox'));
+
+    expect(screen.queryByRole('button', { name: ACCEPT })).toBeNull();
+  });
+
+  it('hides the chip on fine pointers when touchAccept is "auto" (default)', async () => {
+    mockCoarsePointer(false);
+    const user = userEvent.setup();
+    render(<ForeFill suggestions={REPLIES} placeholder="Reply" />);
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    expect(screen.queryByRole('button', { name: ACCEPT })).toBeNull();
+  });
+
+  it('shows the chip on coarse pointers when touchAccept is "auto"', async () => {
+    mockCoarsePointer(true);
+    const user = userEvent.setup();
+    render(<ForeFill suggestions={REPLIES} placeholder="Reply" />);
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    expect(screen.getByRole('button', { name: ACCEPT })).toBeInTheDocument();
+  });
+
+  it('never renders touch controls when touchAccept is false, even on coarse pointers', async () => {
+    mockCoarsePointer(true);
+    const user = userEvent.setup();
+    render(<ForeFill suggestions={REPLIES} touchAccept={false} placeholder="Reply" />);
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    expect(screen.queryByRole('button', { name: ACCEPT })).toBeNull();
+    expect(ghostWords()).toHaveLength(0);
+  });
+
+  it('accepts the full hint when the chip is tapped', async () => {
+    const user = userEvent.setup();
+    const onAccept = vi.fn();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        suggestions={REPLIES}
+        touchAccept
+        onAccept={onAccept}
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: ACCEPT }));
+    expect(onAccept).toHaveBeenCalledWith(
+      'Happy to help — let me take a look.',
+      'Happy to help — let me take a look.'
+    );
+    expect(onCommit).toHaveBeenCalledWith('Happy to help — let me take a look.');
+  });
+
+  it('preventDefaults the chip pointerdown so the editor keeps focus', async () => {
+    const user = userEvent.setup();
+    render(<ForeFill suggestions={REPLIES} touchAccept placeholder="Reply" />);
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    // fireEvent returns false when the (cancelable) event was preventDefault-ed.
+    const notCanceled = fireEvent.pointerDown(
+      screen.getByRole('button', { name: ACCEPT })
+    );
+    expect(notCanceled).toBe(false);
+  });
+
+  it('fires accept exactly once across pointerdown + click', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill suggestions={REPLIES} touchAccept onCommit={onCommit} placeholder="Reply" />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    const button = screen.getByRole('button', { name: ACCEPT });
+    fireEvent.pointerDown(button);
+    fireEvent.click(button);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('grows the value by one word when a non-final ghost word is tapped', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        touchAccept
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox') as HTMLInputElement;
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).toBe(' to help — let me take a look.'));
+
+    fireEvent.pointerDown(ghostWords()[0]);
+    await waitFor(() => expect(field.value).toBe('Happy to'));
+    await waitFor(() => expect(ghostSuffix()).toBe(' help — let me take a look.'));
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('accepts the whole hint when the final ghost word is tapped', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        touchAccept
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox') as HTMLInputElement;
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostWords().length).toBeGreaterThan(1));
+
+    const words = ghostWords();
+    fireEvent.pointerDown(words[words.length - 1]);
+    expect(onCommit).toHaveBeenCalledWith('Happy to help — let me take a look.');
+  });
+
+  it('does not split a prefixed (substring) hint into words — a tap accepts in full', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill suggestions={REPLIES} touchAccept onCommit={onCommit} placeholder="Reply" />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'week');
+    await waitFor(() =>
+      expect(ghostPrefix()).toBe('Hope you have a great rest of your ')
+    );
+
+    // A non-start-anchored hint renders a single tappable span, not per-word spans.
+    expect(ghostWords()).toHaveLength(1);
+    fireEvent.pointerDown(ghostWords()[0]);
+    expect(onCommit).toHaveBeenCalledWith('Hope you have a great rest of your week!');
+  });
+
+  it('announces touch accept behavior in the helper text', async () => {
+    const user = userEvent.setup();
+    render(<ForeFill suggestions={REPLIES} touchAccept showHelper placeholder="Reply" />);
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent(/Tap a word to accept/i)
+    );
+    expect(screen.getAllByText(/Tap a word or accept/i).length).toBeGreaterThan(0);
+  });
+
+  it('supports a custom accept control via renderTouchAccept', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    const received: { suggestion: string; label: string }[] = [];
+    render(
+      <ForeFill
+        suggestions={REPLIES}
+        touchAccept
+        onCommit={onCommit}
+        renderTouchAccept={({ accept, suggestion, label }) => {
+          received.push({ suggestion, label });
+          return (
+            <button
+              type="button"
+              data-testid="custom-accept"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                accept();
+              }}
+            >
+              {label}
+            </button>
+          );
+        }}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(screen.queryByTestId('custom-accept')).not.toBeNull());
+
+    expect(received[received.length - 1]).toEqual({
+      suggestion: 'Happy to help — let me take a look.',
+      label: 'Accept suggestion',
+    });
+    fireEvent.pointerDown(screen.getByTestId('custom-accept'));
+    expect(onCommit).toHaveBeenCalledWith('Happy to help — let me take a look.');
+  });
+
+  it('uses a custom touchAcceptLabel as the chip accessible name', async () => {
+    const user = userEvent.setup();
+    render(
+      <ForeFill
+        suggestions={REPLIES}
+        touchAccept
+        touchAcceptLabel="Use suggestion"
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Happy');
+    await waitFor(() => expect(ghostSuffix()).not.toBeNull());
+
+    expect(screen.getByRole('button', { name: 'Use suggestion' })).toBeInTheDocument();
   });
 });
