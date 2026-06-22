@@ -9,6 +9,7 @@ const REPLIES = [
   'Thanks for the quick turnaround.',
   'Happy to help — let me take a look.',
   'Hope you have a great rest of your week!',
+  'Let me know if you have any questions.',
 ];
 
 function ghostSuffix(): string | null {
@@ -512,6 +513,273 @@ describe('ForeFill — trigger suggestions', () => {
 });
 
 describe('ForeFill — existing text completion', () => {
+  it('continues substring completion after an accepted value', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        matchMode="substring"
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Thanks');
+    await waitFor(() => expect(ghostSuffix()).toBe(' so much for reaching out!'));
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith('Thanks so much for reaching out!');
+
+    onCommit.mockClear();
+    await user.type(field, ' if you');
+
+    await waitFor(() => expect(ghostPrefix()).toBe('Let me know '));
+    expect(ghostSuffix()).toBe(' have any questions.');
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith(
+      'Thanks so much for reaching out! Let me know if you have any questions.'
+    );
+  });
+
+  it('continues substring completion after deleting from an accepted value', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        matchMode="substring"
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox') as HTMLInputElement;
+    await user.click(field);
+    await user.type(field, 'Thanks');
+    await waitFor(() => expect(ghostSuffix()).toBe(' so much for reaching out!'));
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    await waitFor(() => expect(field.value).toBe('Thanks so much for reaching out!'));
+
+    await user.keyboard('{Backspace}');
+    expect(field.value).toBe('Thanks so much for reaching out');
+
+    onCommit.mockClear();
+    await user.type(field, ' if you');
+
+    await waitFor(() => expect(ghostPrefix()).toBe('Let me know '));
+    expect(ghostSuffix()).toBe(' have any questions.');
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith(
+      'Thanks so much for reaching out Let me know if you have any questions.'
+    );
+  });
+
+  it('continues startsWith completion after deleting multiple accepted characters', async () => {
+    const user = userEvent.setup();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        matchMode="startsWith"
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox') as HTMLInputElement;
+    await user.click(field);
+    await user.type(field, 'Thanks');
+    await waitFor(() => expect(ghostSuffix()).toBe(' so much for reaching out!'));
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    await waitFor(() => expect(field.value).toBe('Thanks so much for reaching out!'));
+
+    await user.keyboard('{Backspace}{Backspace}{Backspace}');
+    expect(field.value).toBe('Thanks so much for reaching o');
+
+    await user.type(field, ' Happy');
+
+    await waitFor(() =>
+      expect(ghostSuffix()).toBe(' to help — let me take a look.')
+    );
+  });
+
+  it('continues substring completion after modifying accepted text in the middle', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        matchMode="substring"
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox') as HTMLInputElement;
+    await user.click(field);
+    await user.type(field, 'Thanks');
+    await waitFor(() => expect(ghostSuffix()).toBe(' so much for reaching out!'));
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    await waitFor(() => expect(field.value).toBe('Thanks so much for reaching out!'));
+
+    field.setSelectionRange('Thanks so '.length, 'Thanks so '.length);
+    fireEvent.select(field);
+    await user.keyboard('very ');
+    expect(field.value).toBe('Thanks so very much for reaching out!');
+
+    field.setSelectionRange(field.value.length, field.value.length);
+    fireEvent.select(field);
+    onCommit.mockClear();
+    await user.type(field, ' if you');
+
+    await waitFor(() => expect(ghostPrefix()).toBe('Let me know '));
+    expect(ghostSuffix()).toBe(' have any questions.');
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith(
+      'Thanks so very much for reaching out! Let me know if you have any questions.'
+    );
+  });
+
+  it('starts a fresh query after appended freeform text has no matches', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={REPLIES}
+        matchMode="substring"
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox') as HTMLInputElement;
+    await user.click(field);
+    await user.type(field, 'Thanks');
+    await waitFor(() => expect(ghostSuffix()).toBe(' so much for reaching out!'));
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    await waitFor(() => expect(field.value).toBe('Thanks so much for reaching out!'));
+
+    onCommit.mockClear();
+    await user.type(field, ' and ');
+    await waitFor(() => expect(document.querySelector('.ff-ghost')).toBeNull());
+    await user.type(field, 'if you');
+
+    await waitFor(() => expect(ghostPrefix()).toBe('Let me know '));
+    expect(ghostSuffix()).toBe(' have any questions.');
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith(
+      'Thanks so much for reaching out! and Let me know if you have any questions.'
+    );
+  });
+
+  it('keeps ghosts suppressed after a middle deletion while the caret stays mid-value', async () => {
+    const user = userEvent.setup();
+    render(
+      <ForeFill
+        as="input"
+        suggestions={['Thanks so much for reaching out!']}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox') as HTMLInputElement;
+    await user.click(field);
+    await user.type(field, 'Thanks');
+    await waitFor(() => expect(ghostSuffix()).toBe(' so much for reaching out!'));
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    await waitFor(() => expect(field.value).toBe('Thanks so much for reaching out!'));
+
+    field.setSelectionRange(1, 1);
+    fireEvent.select(field);
+    await user.keyboard('{Backspace}');
+    await user.type(field, 'Let');
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.querySelector('.ff-ghost')).toBeNull();
+  });
+
+  it('shows a composed substring ghost after a direct existing value', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        defaultValue="Thanks so much for reaching out! "
+        suggestions={['Let me know if you have any questions.']}
+        matchMode="substring"
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'if you');
+
+    await waitFor(() => expect(ghostPrefix()).toBe('Let me know '));
+    expect(ghostSuffix()).toBe(' have any questions.');
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith(
+      'Thanks so much for reaching out! Let me know if you have any questions.'
+    );
+  });
+
+  it('keeps startsWith completions working after an existing value', async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    render(
+      <ForeFill
+        as="input"
+        defaultValue="Thanks so much for reaching out! "
+        suggestions={['Let me know if you have any questions.']}
+        matchMode="startsWith"
+        onCommit={onCommit}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'Let');
+
+    await waitFor(() =>
+      expect(ghostSuffix()).toBe(' me know if you have any questions.')
+    );
+
+    fireEvent.keyDown(field, { key: 'Tab' });
+    expect(onCommit).toHaveBeenCalledWith(
+      'Thanks so much for reaching out! Let me know if you have any questions.'
+    );
+  });
+
+  it('suppresses composed substring completions that exceed maxLength', async () => {
+    const user = userEvent.setup();
+    render(
+      <ForeFill
+        as="input"
+        defaultValue="Thanks so much for reaching out! "
+        suggestions={['Let me know if you have any questions.']}
+        matchMode="substring"
+        maxLength={40}
+        placeholder="Reply"
+      />
+    );
+    const field = screen.getByRole('textbox');
+    await user.click(field);
+    await user.type(field, 'if you');
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.querySelector('.ff-ghost')).toBeNull();
+  });
+
   it('autosuggests appended text when the field already has a value', async () => {
     const user = userEvent.setup();
     const onCommit = vi.fn();

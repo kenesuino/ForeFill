@@ -183,6 +183,7 @@ export interface ForeFillHandle {
 }
 
 interface SuggestionParts {
+  base?: string;
   prefix: string;
   typed: string;
   suffix: string;
@@ -255,6 +256,15 @@ function getCompletionContext(
     queryStart,
     query: value.slice(queryStart),
   };
+}
+
+function getChangeStart(previousValue: string, nextValue: string): number {
+  const max = Math.min(previousValue.length, nextValue.length);
+  let index = 0;
+  while (index < max && previousValue[index] === nextValue[index]) {
+    index += 1;
+  }
+  return index;
 }
 
 function isWordTrigger(trigger: string): boolean {
@@ -374,27 +384,33 @@ function buildNormalCompletion(
   const valuePrefix = value.slice(0, context.queryStart);
   const finalSegment = `${parts.prefix}${context.query}${parts.suffix}`;
 
-  // With text already in the field before the query (queryStart > 0), the inline
-  // ghost can only render as a clean append — the real value stays in place and
-  // the ghost trails after it. A substring match (non-empty prefix) would have
-  // to inject the prefix mid-string, which the single-shift overlay can't align,
-  // so it's skipped here. Whole-value matching (queryStart === 0) covers the
-  // case where the field's entire content is itself a substring of a suggestion.
-  if (context.queryStart > 0 && parts.prefix !== '') {
-    return null;
+  // When text before the active query already exists, start-anchored matches can
+  // keep using a trailing ghost. Mid-suggestion matches need a composed ghost so
+  // the saved text and newly typed substring stay visually aligned.
+  if (context.queryStart > 0) {
+    return {
+      suggestion,
+      finalValue: `${valuePrefix}${finalSegment}`,
+      parts:
+        parts.prefix === ''
+          ? {
+              prefix: '',
+              typed: value,
+              suffix: parts.suffix,
+            }
+          : {
+              base: valuePrefix,
+              prefix: parts.prefix,
+              typed: context.query,
+              suffix: parts.suffix,
+            },
+    };
   }
 
   return {
     suggestion,
     finalValue: `${valuePrefix}${finalSegment}`,
-    parts:
-      context.queryStart > 0
-        ? {
-            prefix: '',
-            typed: value,
-            suffix: parts.suffix,
-          }
-        : parts,
+    parts,
   };
 }
 
@@ -559,6 +575,7 @@ export const ForeFill = forwardRef(function ForeFill(
   const [inlineMatches, setInlineMatches] = useState<InlineCompletion[]>([]);
   const [caretAtEnd, setCaretAtEnd] = useState(true);
   const [activeSegmentStart, setActiveSegmentStart] = useState(0);
+  const [ghostScroll, setGhostScroll] = useState({ left: 0, top: 0 });
 
   const editorRef = useRef<EditableElement | null>(null);
   const ghostMeasureRef = useRef<HTMLSpanElement | null>(null);
@@ -648,6 +665,17 @@ export const ForeFill = forwardRef(function ForeFill(
     setCaretAtEnd(node ? isCaretAtEnd(node) : true);
   }, []);
 
+  const syncGhostScroll = useCallback(() => {
+    const node = editorRef.current;
+    const nextLeft = node?.scrollLeft ?? 0;
+    const nextTop = node?.scrollTop ?? 0;
+    setGhostScroll((current) =>
+      current.left === nextLeft && current.top === nextTop
+        ? current
+        : { left: nextLeft, top: nextTop }
+    );
+  }, []);
+
   const commitValue = useCallback(
     (finalValue: string) => {
       setValue(finalValue);
@@ -667,11 +695,12 @@ export const ForeFill = forwardRef(function ForeFill(
           setEditableText(node, finalValue);
         }
         moveCaretToEnd(node);
+        syncGhostScroll();
       }
 
       onCommit?.(finalValue);
     },
-    [isControlled, onCommit, setValue, surface]
+    [isControlled, onCommit, setValue, surface, syncGhostScroll]
   );
 
   // Grows the value toward the suggestion without finalizing it — used by
@@ -688,9 +717,17 @@ export const ForeFill = forwardRef(function ForeFill(
   );
 
   const handleEditorChange = (nextValue: string) => {
+    const node = editorRef.current;
+    const nextCaretAtEnd = node ? isCaretAtEnd(node) : true;
+    const changeStart = getChangeStart(currentValue, nextValue);
+
     setValue(nextValue);
-    setActiveSegmentStart((start) => (nextValue.length < start ? 0 : start));
-    syncCaret();
+    setActiveSegmentStart((start) => {
+      if (changeStart < start) return nextValue.length;
+      return start;
+    });
+    setCaretAtEnd(nextCaretAtEnd);
+    syncGhostScroll();
 
     if (dismissedValueRef.current !== nextValue) {
       dismissedValueRef.current = null;
@@ -787,6 +824,7 @@ export const ForeFill = forwardRef(function ForeFill(
     setIsFocused(true);
     setActiveSegmentStart(currentValue.length > 0 ? currentValue.length : 0);
     syncCaret();
+    syncGhostScroll();
   };
 
   const handleBlur = () => {
@@ -805,8 +843,11 @@ export const ForeFill = forwardRef(function ForeFill(
     if (!node || getEditableText(node) === currentValue) return;
 
     setEditableText(node, currentValue);
-    if (isFocused) moveCaretToEnd(node);
-  }, [currentValue, isFocused, surface]);
+    if (isFocused) {
+      moveCaretToEnd(node);
+      syncGhostScroll();
+    }
+  }, [currentValue, isFocused, surface, syncGhostScroll]);
 
   useBrowserLayoutEffect(() => {
     if (surface !== 'contenteditable' || !autoFocus || disabled) return;
@@ -817,7 +858,8 @@ export const ForeFill = forwardRef(function ForeFill(
     moveCaretToEnd(node);
     setIsFocused(true);
     setCaretAtEnd(true);
-  }, [autoFocus, disabled, surface]);
+    syncGhostScroll();
+  }, [autoFocus, disabled, surface, syncGhostScroll]);
 
   // After a programmatic value growth (word-by-word accept) React re-renders the
   // longer value but may keep the caret at its old offset (now mid-string).
@@ -829,8 +871,9 @@ export const ForeFill = forwardRef(function ForeFill(
     if (node) {
       moveCaretToEnd(node);
       setCaretAtEnd(true);
+      syncGhostScroll();
     }
-  }, [currentValue]);
+  }, [currentValue, syncGhostScroll]);
 
   // contenteditable doesn't emit `onSelect`, so caret moves (click, arrows)
   // are observed via the document-level `selectionchange` event while focused.
@@ -895,6 +938,14 @@ export const ForeFill = forwardRef(function ForeFill(
 
     if (nextAvailableMatches.length === 0) {
       setGhostCompletion(null);
+      if (
+        !activeTrigger &&
+        completionContext.queryStart < currentValue.length &&
+        /\s$/.test(completionContext.query) &&
+        completionContext.query.trim().length >= minQueryLength
+      ) {
+        setActiveSegmentStart(currentValue.length);
+      }
       return;
     }
 
@@ -927,6 +978,7 @@ export const ForeFill = forwardRef(function ForeFill(
   const ghostTextParts = ghostCompletion?.parts ?? null;
   const ghostPrefix = ghostTextParts?.prefix ?? '';
   const hasGhostTextParts = ghostTextParts !== null;
+  const isComposedGhost = ghostTextParts?.base !== undefined;
   const canCycleSuggestions = enableArrowNavigation && inlineMatches.length > 1;
 
   const showHelperText =
@@ -985,6 +1037,12 @@ export const ForeFill = forwardRef(function ForeFill(
   const editorPrefixStyle: CSSProperties | undefined =
     ghostTextParts && ghostPrefixOffset > 0
       ? { paddingLeft: `calc(var(--ff-padding-x) + ${ghostPrefixOffset}px)` }
+      : undefined;
+  const ghostScrollStyle: CSSProperties | undefined =
+    ghostScroll.left !== 0 || ghostScroll.top !== 0
+      ? {
+          transform: `translate(${-ghostScroll.left}px, ${-ghostScroll.top}px)`,
+        }
       : undefined;
 
   const acceptHintText = acceptOnEnter
@@ -1083,6 +1141,7 @@ export const ForeFill = forwardRef(function ForeFill(
       data-state={resolvedState}
       data-loading={isLoadingState ? 'true' : undefined}
       data-disabled={disabled ? 'true' : undefined}
+      data-ghost-composed={isComposedGhost ? 'true' : undefined}
       data-theme={theme}
     >
       <div className="ff-field">
@@ -1095,7 +1154,15 @@ export const ForeFill = forwardRef(function ForeFill(
         </span>
 
         {ghostTextParts && (
-          <div className="ff-ghost" aria-hidden="true">
+          <div
+            className="ff-ghost"
+            data-composed={isComposedGhost ? 'true' : undefined}
+            aria-hidden="true"
+            style={ghostScrollStyle}
+          >
+            {isComposedGhost && (
+              <span className="ff-ghost-base">{ghostTextParts.base}</span>
+            )}
             <span className="ff-ghost-prefix">{ghostTextParts.prefix}</span>
             <span className="ff-ghost-typed">{ghostTextParts.typed}</span>
             <span className="ff-ghost-suffix">{ghostTextParts.suffix}</span>
@@ -1122,6 +1189,7 @@ export const ForeFill = forwardRef(function ForeFill(
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             onSelect={syncCaret}
+            onScroll={syncGhostScroll}
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder={placeholder}
@@ -1146,6 +1214,7 @@ export const ForeFill = forwardRef(function ForeFill(
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onSelect={syncCaret}
+            onScroll={syncGhostScroll}
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder={placeholder}
@@ -1179,6 +1248,7 @@ export const ForeFill = forwardRef(function ForeFill(
             onInput={handleContentEditableInput}
             onKeyDown={handleKeyDown}
             onSelect={syncCaret}
+            onScroll={syncGhostScroll}
             onFocus={handleFocus}
             onBlur={handleBlur}
             className={editableClassName}

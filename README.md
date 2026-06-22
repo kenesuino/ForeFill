@@ -137,12 +137,21 @@ can still complete a newly appended `Thanks` into:
 Happy to help - let me take a look. Thanks so much for reaching out!
 ```
 
+In `substring` mode, the newly typed segment can also match the middle of the
+next suggestion. After accepting `Thanks so much for reaching out!`, typing
+` if you` can show `Let me know ` on the left and ` have any questions.` on the
+right, then accept into:
+
+```txt
+Thanks so much for reaching out! Let me know if you have any questions.
+```
+
 With `matchWholeValue` (on by default), the saved text is also matched as a
 whole, so when the field's entire value is contained in a suggestion it renders
 the full left+right ghost — a field holding `have a great` completes to
 `Hope you have a great rest of your week!`. Set `matchWholeValue={false}` to
-complete only the newly appended segment. Async and trigger suggestions are
-unaffected either way.
+skip that whole-field pass. Active-segment matching, async suggestions, and
+trigger suggestions are unaffected either way.
 
 ## Copy-Paste Recipes
 
@@ -773,7 +782,7 @@ Every public prop below includes its use and a short example.
 | `triggerSuggestions` | `ForeFillTriggerSuggestion[]`, default `[]` | Adds trigger-specific completions for symbols or words, such as email domains after `@`. | `<ForeFill triggerSuggestions={[{ trigger: '@', suggestions: ['gmail.com'] }]} />` |
 | `asyncSuggestions` | `(query: string, context?: { signal: AbortSignal }) => Promise<string[]>` | Loads suggestions from an API, aborts stale requests, and takes precedence over `suggestions`. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={250} />` |
 | `matchMode` | `'startsWith' \| 'substring'`, default `'substring'` | Controls matching for normal suggestions; trigger suggestions always use starts-with matching. | `<ForeFill matchMode="startsWith" />` |
-| `matchWholeValue` | `boolean`, default `true` | When the field already contains text, also matches the whole value against the static `suggestions` so a suggestion that contains it renders the full left+right ghost. Off completes only newly appended text. Async/trigger sources are unaffected. | `<ForeFill matchWholeValue={false} />` |
+| `matchWholeValue` | `boolean`, default `true` | When the field already contains text, also matches the whole value against the static `suggestions` so a suggestion that contains it renders the full left+right ghost. Off skips only that whole-field pass; active-segment matching still works. Async/trigger sources are unaffected. | `<ForeFill matchWholeValue={false} />` |
 | `minQueryLength` | `number`, default `1` | Requires a trimmed query length before suggestions activate. | `<ForeFill minQueryLength={3} />` |
 | `debounceMs` | `number`, default `0` | Delays async requests while the user is typing. | `<ForeFill asyncSuggestions={fetchSuggestions} debounceMs={300} />` |
 | `disableInlineFill` | `boolean`, default `false` | Keeps the editable field behavior but hides ghost hints. | `<ForeFill disableInlineFill />` |

@@ -299,6 +299,11 @@
   word-wrap: normal;
 }
 
+.ff-root[data-ghost-composed="true"] .ff-editor {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
 /* Hidden width-measuring span used to align the typed text over the ghost. */
 .ff-ghost-measure {
   position: absolute;
@@ -321,8 +326,15 @@
 .ff-ghost-suffix {
   color: var(--ff-faint);
 }
+.ff-ghost-base {
+  color: transparent;
+}
 .ff-ghost-typed {
   color: transparent;
+}
+.ff-ghost[data-composed="true"] .ff-ghost-base,
+.ff-ghost[data-composed="true"] .ff-ghost-typed {
+  color: var(--ff-text);
 }
 
 /* ----- Editable surfaces ------------------------------------------------ */

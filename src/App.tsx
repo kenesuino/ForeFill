@@ -473,7 +473,7 @@ const API_PROPS: ApiProp[] = [
     type: 'boolean',
     def: 'true',
     desc: 'Match the entire field value when it already contains text.',
-    purpose: "Lets a suggestion that contains the whole value render the full left+right ghost (e.g. 'have a great' completes to 'Hope you have a great rest of your week!'). Turn off to only complete newly appended text.",
+    purpose: "Lets a suggestion that contains the whole value render the full left+right ghost (e.g. 'have a great' completes to 'Hope you have a great rest of your week!'). Turn off to skip only that whole-field pass; active-segment matching still works.",
     example: '<ForeFill matchWholeValue={false} />',
   },
   {
@@ -2370,7 +2370,8 @@ import '${PKG}/styles.css';`}
         <DocSection id="existing-values" title="Existing values" icon={<Zap className="h-5 w-5" />}>
           <p>
             When a field already contains text, ForeFill treats newly appended text as the
-            active query. Accepting a suggestion preserves the saved prefix.
+            active query. Accepting a suggestion preserves the saved prefix, and
+            substring matches can still show left+right ghost text around that new query.
           </p>
           <ExampleCard
             filename="ExistingValue.tsx"
@@ -2390,7 +2391,7 @@ import '${PKG}/styles.css';`}
             With <code>matchWholeValue</code> (on by default) the saved text is also
             matched as a whole, so when the entire value is contained in a suggestion it
             renders the full left+right ghost. Set <code>matchWholeValue={'{false}'}</code> to
-            complete only newly appended text.
+            skip that whole-field pass while keeping active-segment matching.
           </p>
           <ExampleCard
             filename="MatchWholeValue.tsx"
