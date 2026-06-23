@@ -1,8 +1,8 @@
 {
   "name": "forefill",
   "private": false,
-  "version": "0.1.4",
-  "description": "ForeFill — inline ghost-text autocomplete for React textareas, textboxes, and contenteditable surfaces.",
+  "version": "0.2.0",
+  "description": "ForeFill — inline ghost-text autocomplete for React and vanilla JS textareas, inputs, and contenteditable surfaces.",
   "type": "module",
   "license": "MIT",
   "author": "",
@@ -16,6 +16,8 @@
   "homepage": "https://kenesuino.github.io/ForeFill/",
   "keywords": [
     "react",
+    "vanilla",
+    "framework-agnostic",
     "forefill",
     "ghost-text",
     "textarea",
@@ -30,6 +32,8 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "style": "./dist/styles.css",
+  "jsdelivr": "./dist/vanilla.js",
+  "unpkg": "./dist/vanilla.js",
   "sideEffects": [
     "*.css",
     "./dist/styles.css"
@@ -47,6 +51,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./vanilla": {
+      "types": "./dist/vanilla.d.ts",
+      "import": "./dist/vanilla.js",
+      "require": "./dist/vanilla.cjs"
     },
     "./styles.css": "./dist/styles.css",
     "./package.json": "./package.json"
@@ -70,6 +79,11 @@
   },
   "peerDependencies": {
     "react": ">=18 <20"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",

@@ -45,12 +45,15 @@ It is designed for forms where users should keep typing naturally, then accept a
 npm install forefill
 ```
 
-Import the component and stylesheet:
+React is an optional peer dependency. Import the component and stylesheet:
 
 ```tsx
 import { ForeFill } from 'forefill';
 import 'forefill/styles.css';
 ```
+
+For non-React projects, use the framework-agnostic `forefill/vanilla` entry
+(see [Vanilla / CDN](#vanilla--cdn) below) — it has no React import.
 
 ## Quick Start
 
@@ -980,6 +983,118 @@ type UseSuggestionsResult = {
 | `matches` | The filtered suggestion strings. | `const { matches } = useSuggestions(query, options)` |
 | `isLoading` | True while an async fetch is in flight. | `const { isLoading } = useSuggestions(query, options)` |
 
+## Vanilla / CDN
+
+For non-React apps (plain JS, Vue, Svelte, Solid, Alpine, htmx, vanilla TS),
+ForeFill ships a framework-agnostic entry at `forefill/vanilla`. It has **no
+React import** and works with any existing `<textarea>`, `<input>`, or
+`[contenteditable]` element. The surface is inferred from the element.
+
+```bash
+npm install forefill
+```
+
+```ts
+import { attachForeFill } from 'forefill/vanilla';
+import 'forefill/styles.css';
+
+const ff = attachForeFill(document.querySelector<HTMLTextAreaElement>('#reply'), {
+  suggestions: [
+    'Thanks so much for reaching out!',
+    'Happy to help — let me take a look.',
+  ],
+  matchMode: 'substring',
+  onAccept: (value, suggestion) => track('accepted', suggestion),
+  onCommit: (value) => save(value),
+  onDismiss: () => track('dismissed'),
+});
+
+ff.focus();
+// ...later
+ff.destroy(); // removes the overlay and restores the original element
+```
+
+`createForeFill` builds the editor element for you when you don't have one:
+
+```ts
+import { createForeFill } from 'forefill/vanilla';
+import 'forefill/styles.css';
+
+const ff = createForeFill(document.querySelector('#host')!, {
+  as: 'textarea', // 'textarea' | 'input' | 'contenteditable'
+  suggestions: notes,
+});
+```
+
+### Vanilla API
+
+```ts
+function attachForeFill(
+  editor: HTMLTextAreaElement | HTMLInputElement | HTMLDivElement,
+  options: ForeFillVanillaOptions
+): ForeFillInstance;
+
+function createForeFill(
+  container: HTMLElement,
+  options: CreateForeFillOptions
+): ForeFillInstance;
+```
+
+`ForeFillVanillaOptions` mirrors the React props, with two vanilla-shaped
+fields: `helperText` is a `string` (not ReactNode) and `renderTouchAccept`
+returns an `HTMLElement`. There is no controlled `value` prop — the editor
+element is the source of truth; use `setValue()` to set it programmatically.
+
+```ts
+type ForeFillInstance = {
+  focus: () => void;
+  blur: () => void;
+  select: () => void;
+  setValue: (next: string) => void;
+  getValue: () => string;
+  setOptions: (options: Partial<ForeFillVanillaOptions>) => void;
+  destroy: () => void;
+};
+```
+
+The matching engine is also exported for custom UIs:
+
+```ts
+import { filterMatches } from 'forefill/vanilla';
+filterMatches('Thanks', suggestions, 'substring');
+```
+
+### Via CDN (no bundler)
+
+The package ships a self-contained vanilla build, so you can load it directly
+from jsDelivr/unpkg without React or a build step:
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/forefill/dist/styles.css">
+<script type="module">
+  import { attachForeFill } from 'https://cdn.jsdelivr.net/npm/forefill/dist/vanilla.js';
+  attachForeFill(document.querySelector('#reply'), {
+    suggestions: ['Thanks so much for reaching out!'],
+    onCommit: (v) => console.log(v),
+  });
+</script>
+```
+
+> The `package.json` `jsdelivr`/`unpkg` fields point at `dist/vanilla.js` so the
+> package page features a directly-usable JS file (not only the CSS URL). The
+> React entry remains at `dist/index.js` for bundler-based React consumers.
+
+### Vanilla notes
+
+- The same `forefill/styles.css` stylesheet themes both the React component and
+  the vanilla entry.
+- Behavior (ghost rendering, Tab/Enter accept, Escape, ArrowDown/Up cycling,
+  Ctrl/Cmd+ArrowRight word-by-word accept, triggers, async with abort,
+  maxLength suppression, touch controls) mirrors the React component.
+- The vanilla core lives under `src/lib/core/*` and is a parallel implementation
+  (it does not import the React component), so the two surfaces can evolve
+  independently.
+
 ## Local Development
 
 Run the demo:
@@ -1006,6 +1121,9 @@ The package build emits:
 dist/index.js
 dist/index.cjs
 dist/index.d.ts
+dist/vanilla.js
+dist/vanilla.cjs
+dist/vanilla.d.ts
 dist/**/*.d.ts
 dist/styles.css
 ```

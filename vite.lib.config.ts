@@ -7,10 +7,14 @@ export default defineConfig({
   publicDir: false,
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/lib/index.ts'),
+      entry: {
+        index: resolve(__dirname, 'src/lib/index.ts'),
+        vanilla: resolve(__dirname, 'src/lib/vanilla.ts'),
+      },
       name: 'ForeFill',
       formats: ['es', 'cjs'],
-      fileName: (format) => (format === 'es' ? 'index.js' : 'index.cjs'),
+      fileName: (format, entryName) =>
+        format === 'es' ? `${entryName}.js` : `${entryName}.cjs`,
     },
     rollupOptions: {
       external: ['react', 'react/jsx-runtime'],
